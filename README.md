@@ -1,6 +1,7 @@
 # WenHe 的 Aegisub 脚本
 
 文何的 Aegisub Automation 脚本仓库，可通过 DependencyControl 安装和自动更新。
+
 **AI使用说明：本仓库的绝大多数内容都是AI生成的，太好用了AI（**
 
 ## 收录脚本

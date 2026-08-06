@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TypesettingTools/DependencyControl/publish/schemas/feed/v0.4.0.json",
+  "dependencyControlFeedFormatVersion": "0.4.0",
+  "name": "WenHe 的 Aegisub 脚本",
+  "description": "WenHe 维护的 Aegisub 自动化脚本源。",
+  "maintainer": "WenHe",
+  "baseUrl": "https://github.com/WenHe233/WenHe-Aegisub-Scripts",
+  "url": "@{baseUrl}",
+  "fileBaseUrl": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/@{namespace}-v@{version}/macros/@{namespace}",
+  "localFileBasePath": "./macros/@{namespace}",
+  "macros": {}
+}

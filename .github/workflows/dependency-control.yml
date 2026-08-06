@@ -1,0 +1,199 @@
+name: DependencyControl
+
+on:
+  pull_request:
+    paths:
+      - "macros/*.lua"
+      - "packages/*.json"
+      - "DependencyControl.json"
+      - "tools/sync_dependency_control.py"
+      - "tests/**"
+      - "requirements-ci.txt"
+      - ".github/workflows/dependency-control.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "macros/*.lua"
+      - "packages/*.json"
+      - "DependencyControl.json"
+      - "tools/sync_dependency_control.py"
+      - "tests/**"
+      - "requirements-ci.txt"
+      - ".github/workflows/dependency-control.yml"
+
+concurrency:
+  group: dependency-control-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install validation dependency
+        run: python -m pip install --requirement requirements-ci.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate prospective feed
+        run: >-
+          python tools/sync_dependency_control.py
+          --base "${{ github.event.pull_request.base.sha }}"
+          --head "${{ github.event.pull_request.head.sha }}"
+          --plan "${{ runner.temp }}/release-plan.json"
+
+  release:
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout pushed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install validation dependency
+        run: python -m pip install --requirement requirements-ci.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Synchronize feed
+        id: sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan="${RUNNER_TEMP}/release-plan.json"
+          python tools/sync_dependency_control.py \
+            --base "${{ github.event.before }}" \
+            --head "${{ github.sha }}" \
+            --write \
+            --plan "${plan}"
+          echo "plan=${plan}" >> "${GITHUB_OUTPUT}"
+
+      - name: Commit generated feed to main
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+
+          remote_main="$(git rev-parse origin/main)"
+          event_commit="${{ github.sha }}"
+          if [[ "${remote_main}" != "${event_commit}" ]]; then
+            remote_parent="$(git rev-parse "${remote_main}^")"
+            remote_subject="$(git show -s --format=%s "${remote_main}")"
+            remote_feed="$(mktemp)"
+            git show "${remote_main}:DependencyControl.json" > "${remote_feed}"
+            if [[ "${remote_parent}" == "${event_commit}" ]] \
+              && [[ "${remote_subject}" == "chore(release): update DependencyControl feed [skip ci]" ]] \
+              && cmp --silent "${remote_feed}" DependencyControl.json; then
+              echo "检测到本次工作流先前生成的 feed 提交，继续未完成的标签/Release 步骤。"
+              git checkout --detach "${remote_main}"
+              echo "commit=${remote_main}" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            echo "main 在发布期间出现了无法安全合并的新提交。" >&2
+            exit 1
+          fi
+
+          git add DependencyControl.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): update DependencyControl feed [skip ci]"
+            git push origin HEAD:main
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - name: Create tags and GitHub Releases
+        if: always() && steps.commit.outcome == 'success'
+        shell: bash
+        env:
+          RELEASE_PLAN: ${{ steps.sync.outputs.plan }}
+          RELEASE_COMMIT: ${{ steps.commit.outputs.commit }}
+        run: |
+          set -euo pipefail
+          items="${RUNNER_TEMP}/release-items.tsv"
+          python - "${RELEASE_PLAN}" > "${items}" <<'PY'
+          import base64
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              releases = json.load(handle)["releases"]
+          for item in releases:
+              title = f"{item['name']} v{item['version']}"
+              notes = "\n".join(f"- {line}" for line in item["release_notes"])
+              encode = lambda value: base64.b64encode(value.encode("utf-8")).decode("ascii")
+              print("\t".join((item["tag"], item["sha1"], item["raw_url"], encode(title), encode(notes))))
+          PY
+
+          while IFS=$'\t' read -r tag expected_sha raw_url title64 notes64; do
+            [[ -n "${tag}" ]] || continue
+            existing="$(git ls-remote --tags origin "refs/tags/${tag}" | awk '{print $1}')"
+            if [[ -n "${existing}" ]]; then
+              git fetch --force origin "refs/tags/${tag}:refs/tags/${tag}"
+              existing_commit="$(git rev-list -n 1 "${tag}")"
+              if [[ "${existing_commit}" != "${RELEASE_COMMIT}" ]]; then
+                echo "标签 ${tag} 已存在，但指向 ${existing_commit}，预期 ${RELEASE_COMMIT}。" >&2
+                exit 1
+              fi
+            else
+              git tag -a "${tag}" "${RELEASE_COMMIT}" -m "${tag}"
+              git push origin "refs/tags/${tag}"
+            fi
+
+            title="$(printf '%s' "${title64}" | base64 --decode)"
+            notes_file="$(mktemp)"
+            printf '%s' "${notes64}" | base64 --decode > "${notes_file}"
+            if gh release view "${tag}" >/dev/null 2>&1; then
+              gh release edit "${tag}" --title "${title}" --notes-file "${notes_file}"
+            else
+              gh release create "${tag}" --verify-tag --title "${title}" --notes-file "${notes_file}"
+            fi
+
+            downloaded="$(mktemp)"
+            verified=false
+            for attempt in {1..8}; do
+              if curl --fail --silent --show-error --location "${raw_url}" --output "${downloaded}"; then
+                actual_sha="$(sha1sum "${downloaded}" | awk '{print $1}')"
+                if [[ "${actual_sha}" == "${expected_sha}" ]]; then
+                  verified=true
+                  break
+                fi
+              fi
+              sleep 5
+            done
+            if [[ "${verified}" != true ]]; then
+              echo "${tag} 的 raw 文件下载或 SHA-1 验证失败。" >&2
+              exit 1
+            fi
+          done < "${items}"

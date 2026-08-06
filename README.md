@@ -19,21 +19,25 @@ https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/main/Dependency
 
 1. 关闭 Aegisub，打开用户配置文件：
    `%APPDATA%\Aegisub\config\l0.DependencyControl.json`。
-2. 先备份该文件，再把上面的地址加入 `config.extraFeeds` 数组。保留数组中已有的其它源，例如：
+2. 先备份该文件。DependencyControl 0.7.0 及以上把源列表放在
+   `config.feeds.extraFeeds`；把上面的地址加入该数组，并保留其中已有的其它源，例如：
 
    ```json
    {
      "$schema": "https://raw.githubusercontent.com/TypesettingTools/DependencyControl/publish/schemas/config/v0.7.0.json",
      "config": {
-       "extraFeeds": [
-         "https://raw.githubusercontent.com/TypesettingTools/DependencyControl/publish/DependencyControl.json",
-         "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/main/DependencyControl.json"
-       ]
+       "feeds": {
+         "extraFeeds": [
+           "https://raw.githubusercontent.com/TypesettingTools/DependencyControl/publish/DependencyControl.json",
+           "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/main/DependencyControl.json"
+         ]
+       }
      }
    }
    ```
 
    你的配置通常还包含已安装宏和模块的记录，不要用这个精简示例覆盖整个文件。
+   DependencyControl 0.6.x 及更早版本使用旧的 `config.extraFeeds` 路径。
 3. 启动 Aegisub，打开「自动化 → DependencyControl → Install Script」。
 4. 从 Automation Scripts 中选择需要的脚本并安装，然后重新扫描自动化目录或重启 Aegisub。
 

@@ -8,5 +8,56 @@
   "url": "@{baseUrl}",
   "fileBaseUrl": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/@{namespace}-v@{version}/macros/@{namespace}",
   "localFileBasePath": "./macros/@{namespace}",
-  "macros": {}
+  "macros": {
+    "wenhe.ApplyMove": {
+      "url": "@{baseUrl}/blob/main/macros/@{namespace}.lua",
+      "author": "WenHe",
+      "name": "套用平移 (\\move)",
+      "description": "把参考行的 \\move 位移(方向/距离)与时间套用到其它选中行",
+      "channels": {
+        "stable": {
+          "version": "1.0.0",
+          "released": "2026-08-06",
+          "default": true,
+          "files": [
+            {
+              "name": ".lua",
+              "url": "@{fileBaseUrl}@{fileName}",
+              "sha1": "692613bab0553850cbbff400662a8608dcd0a9fe"
+            }
+          ]
+        }
+      },
+      "changelog": {
+        "1.0.0": [
+          "发布 1.0.0"
+        ]
+      }
+    },
+    "wenhe.TextFadeInOut": {
+      "url": "@{baseUrl}/blob/main/macros/@{namespace}.lua",
+      "author": "WenHe",
+      "name": "文字渐入渐出",
+      "description": "用分层 clip 生成带柔和边缘的文字渐入 / 渐出效果",
+      "channels": {
+        "stable": {
+          "version": "2.1.0",
+          "released": "2026-08-06",
+          "default": true,
+          "files": [
+            {
+              "name": ".lua",
+              "url": "@{fileBaseUrl}@{fileName}",
+              "sha1": "ccad30621646ecdc4ff2d678f1008e247ed0d142"
+            }
+          ]
+        }
+      },
+      "changelog": {
+        "2.1.0": [
+          "发布 2.1.0"
+        ]
+      }
+    }
+  }
 }

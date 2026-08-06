@@ -155,6 +155,18 @@ class RepositoryCase(unittest.TestCase):
             {"wenhe.First-v1.0.0", "wenhe.Second-v2.0.0"},
         )
 
+    def test_missing_feed_entry_recovers_after_earlier_failed_run(self) -> None:
+        self.write_script("wenhe.Recovered", "1.0.0")
+        script_commit = self.commit("新增待恢复宏")
+        unrelated = self.root / "README.md"
+        unrelated.write_text("触发新的工作流\n", encoding="utf-8")
+        head = self.commit("修复发布工作流")
+
+        feed, plan = sync.synchronize(script_commit, head, "2026-08-06")
+
+        self.assertIn("wenhe.Recovered", feed["macros"])
+        self.assertEqual(plan[0]["tag"], "wenhe.Recovered-v1.0.0")
+
     def test_content_change_without_version_bump_fails(self) -> None:
         base, _, _ = self.publish_initial()
         self.write_script("wenhe.Test", "1.0.0", description="内容已经改变")

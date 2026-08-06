@@ -416,6 +416,17 @@ def synchronize(
     if len(scripts) != len(script_paths):
         raise SyncError("检测到重复的 script_namespace。")
 
+    feed_macros = feed.get("macros", {})
+    if not isinstance(feed_macros, dict):
+        raise SyncError("DependencyControl.json 的 macros 必须是对象。")
+    # Recover cleanly when an earlier publishing run failed before creating the
+    # feed entry. A script absent from the feed is still an unpublished script,
+    # even when its Lua file was introduced by an older commit.
+    missing_feed_namespaces = set(scripts) - set(feed_macros)
+    for namespace, metadata in scripts.items():
+        if namespace in missing_feed_namespaces:
+            changed_scripts.add(metadata.path.relative_to(ROOT).as_posix())
+
     release_namespaces: set[str] = set()
     changelogs: dict[str, list[str]] = {}
 
@@ -425,7 +436,9 @@ def synchronize(
             raise SyncError(f"检测到脚本删除：{relative_path}。")
         current = parse_script(current_path)
         previous_bytes = git_file(base, relative_path) if git_object_exists(base) else None
-        if previous_bytes is None:
+        if current.namespace in missing_feed_namespaces:
+            release_namespaces.add(current.namespace)
+        elif previous_bytes is None:
             release_namespaces.add(current.namespace)
         else:
             previous = parse_script_bytes(Path(relative_path), previous_bytes)

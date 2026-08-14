@@ -10,6 +10,23 @@
 | --- | --- | --- | --- |
 | 文字渐入渐出 | `wenhe.TextFadeInOut` | 2.1.0 | 用分层 `clip` 生成带柔和边缘的文字渐入、渐出效果 |
 | 套用平移 (`\move`) | `wenhe.ApplyMove` | 1.0.0 | 将参考行的 `\move` 方向、距离和时间套用到其它选中行 |
+| 复制选中行正文 | `wenhe.CopySelectedText` | 1.0.0 | 将选中行的纯文本正文或原始 Text 字段复制到剪贴板 |
+
+### 复制选中行正文
+
+这个脚本提供两个可以分别绑定快捷键的宏：
+
+- `复制选中行正文/纯文本`：删除每行所有完整的 `{...}` 块；`\N`、`\n`、`\h` 等 ASS 转义保持原样。
+- `复制选中行正文/原始 Text 字段`：完整复制每行的 Text 字段，包括所有 ASS 标签。
+
+两个宏都会按字幕网格顺序处理全部选中行（包括注释行和空 Text 行），每条 Aegisub 行用一个普通换行分隔，末尾不追加换行。复制成功时不会弹窗，也不会修改字幕。
+
+绑定快捷键时，打开「视图 → 选项 → 快捷键」，建议在 `Default` 上下文中新增以下 Automation 命令之一：
+
+```text
+automation/lua/wenhe.CopySelectedText/复制选中行正文/纯文本
+automation/lua/wenhe.CopySelectedText/复制选中行正文/原始 Text 字段
+```
 
 ## 使用 DependencyControl 安装
 

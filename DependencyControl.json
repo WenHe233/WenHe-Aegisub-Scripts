@@ -58,6 +58,31 @@
           "发布 2.1.0"
         ]
       }
+    },
+    "wenhe.CopySelectedText": {
+      "url": "@{baseUrl}/blob/main/macros/@{namespace}.lua",
+      "author": "WenHe",
+      "name": "复制选中行正文",
+      "description": "将选中行的纯文本正文或原始 Text 字段复制到剪贴板",
+      "channels": {
+        "stable": {
+          "version": "1.0.0",
+          "released": "2026-08-14",
+          "default": true,
+          "files": [
+            {
+              "name": ".lua",
+              "url": "@{fileBaseUrl}@{fileName}",
+              "sha1": "731f270e2db48503c6c51aae618d09ca8c22f738"
+            }
+          ]
+        }
+      },
+      "changelog": {
+        "1.0.0": [
+          "feat: 新增复制选中行正文脚本"
+        ]
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-# 0.4.0 验证记录
+# 0.4.1 验证记录
 
 验证日期：2026-09-25。只使用合成图像、合成字幕及匿名时间边界，不分发工作字幕、视频或字体。
 
@@ -21,6 +21,8 @@
 `test_lua_to_real_python_gui_tracking_and_back` 使用真实 LuaJIT、Win32 进程桥、Python/Tk、FFmpeg 和追踪程序，但 Aegisub API 由内存模型模拟，框选与按钮由测试调用。它验证联动及回填协议，不能替代上面的完整界面验收。
 
 ## 可复现命令
+
+0.4.0 的首次 Actions 构建通过，并已验证公开资产、SHA-256、逐文件校验及发布重跑。但公开包启动器测试发现 Windows PowerShell 没有等待 GUI 子进程的问题；0.4.1 改为显式等待进程，并把真实冻结程序的启动／取消检查加入 `tools/check_portable.py`。使用 0.4.1 或更高版本，旧资产保持不变。
 
 ```powershell
 python tools/build_tracker.py --prepare-ffmpeg

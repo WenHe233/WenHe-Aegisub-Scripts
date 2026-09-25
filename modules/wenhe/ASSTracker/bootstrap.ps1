@@ -85,9 +85,20 @@ try {
         if (-not $SessionDir) { throw 'Session directory is required.' }
         $job = Get-Content -LiteralPath (Join-Path $SessionDir 'job.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($job.tool_version -and $job.tool_version -ne $Version) { throw 'Job version mismatch.' }
-        # Native invocation passes a literal argument array; no shell command construction.
-        & (Join-Path $destination 'ASSTracker.exe') --bridge-dir $SessionDir
-        if ($LASTEXITCODE -ne 0) { throw "Tracking window exited with code $LASTEXITCODE." }
+        # Windows PowerShell does not wait for a GUI-subsystem executable invoked
+        # with &. Wait explicitly so Aegisub can receive the result.
+        # Quote one Windows argv value; no command shell is involved.
+        $argument = [regex]::Replace([IO.Path]::GetFullPath($SessionDir), '(\\*)"', '$1$1\"')
+        $argument = [regex]::Replace($argument, '(\\+)$', '$1$1')
+        $start = New-Object Diagnostics.ProcessStartInfo
+        $start.FileName = Join-Path $destination 'ASSTracker.exe'
+        $start.Arguments = '--bridge-dir "' + $argument + '"'
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $process = [Diagnostics.Process]::Start($start)
+        try { $process.WaitForExit(); $exitCode = $process.ExitCode }
+        finally { $process.Dispose() }
+        if ($exitCode -ne 0) { throw "Tracking window exited with code $exitCode." }
     }
     Write-Output $destination
 } catch {

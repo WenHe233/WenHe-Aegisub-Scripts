@@ -11,7 +11,7 @@
 | 文字渐入渐出 | `wenhe.TextFadeInOut` | 2.1.0 | 用分层 `clip` 生成带柔和边缘的文字渐入、渐出效果 |
 | 套用平移 (`\move`) | `wenhe.ApplyMove` | 1.0.0 | 将参考行的 `\move` 方向、距离和时间套用到其它选中行 |
 | 复制选中行正文 | `wenhe.CopySelectedText` | 1.0.0 | 将选中行的纯文本正文或原始 Text 字段复制到剪贴板 |
-| ASS 追踪 | `wenhe.ASSTracker` | 0.4.0 | 五项联动追踪，支持裁切、绘图和外观缩放，窗口完成后自动回填 |
+| ASS 追踪 | `wenhe.ASSTracker` | 0.4.1 | 五项联动追踪，支持裁切、绘图和外观缩放，窗口完成后自动回填 |
 
 ### ASS 追踪
 

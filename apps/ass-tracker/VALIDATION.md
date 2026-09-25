@@ -17,7 +17,7 @@
 
 ## 界面验证与模拟的区分
 
-此前 0.4.1 已在真实 Aegisub 9706-cibuilds-20caaabc0 加载宏及模块。本次 0.5.0 的独立窗口已用 25 帧合成任务实际启动，程序正常退出；相同任务的凹形追踪完整通过。未使用或修改工作字幕。
+本次安装后实际启动 Aegisub 9706-cibuilds-20caaabc0，未出现脚本加载错误，「自动化」菜单可见「ASS 追踪」。0.5.0 的独立窗口已用 25 帧合成任务实际启动，程序正常退出；相同任务的凹形追踪完整通过。未使用或修改工作字幕。
 
 本次重试截图接口仍返回 `SetIsBorderRequired failed / 0x80004002`，Tk 的辅助功能树只暴露通用窗格，不能可靠定位画面和顶点。因而没有把“实际 Aegisub 点菜单、鼠标框选／拖点、点应用、看到回填并撤销”记为通过；四档 Windows DPI 的完整鼠标视觉验收仍需可用的界面环境。
 
@@ -39,6 +39,14 @@ python tools/check_portable.py
 ```
 
 GitHub Actions 会在每次 PR／发布中重新执行这些检查。首次发布后的公开资产、SHA-256、DependencyControl 源以及下载缓存链路另外校验；以对应 Actions 运行记录和 Release 的 `release-manifest.json` 为准。
+
+## 正式包安装复验（0.5.0）
+
+[0.5.0 发布流水线](https://github.com/WenHe233/WenHe-Aegisub-Scripts/actions/runs/36099136621) 全部通过，源码提交为 `73413a0888c5801284ce324a21bfaea5aafcc9be`。发布后由 PowerShell 启动器从公开 Release 重新下载运行包，校验 SHA-256、版本、源码提交及逐文件哈希；另验证 DependencyControl 宏／模块的全部公开 URL 和 SHA-1。
+
+公开 EXE 在移除外部 Python／FFmpeg PATH 的环境通过自检，并完成 25 帧六点凹形任务。实际验证默认安装、自定义中文路径、旧入口迁移、已有宏备份、0.4.1／0.5.0 并存缓存及缓存启动／取消／等待退出。已安装文件与公开包逐字节一致。原有三个宏的 DependencyControl 配置保持不变。
+
+对 0.5.0 执行了真实发布重跑：复用已发布包并校验全部资产及源文件，识别已发布源后正常结束，未覆盖资产或重复提交。
 
 ## 历史正式包安装复验（0.4.1）
 

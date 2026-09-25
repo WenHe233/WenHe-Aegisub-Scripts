@@ -3,7 +3,7 @@
 script_name = "ASS 追踪"
 script_description = "五项联动平面追踪，支持裁切、绘图和缩放外观，自动回填字幕并保留原行。"
 script_author = "WenHe"
-script_version = "0.4.1"
+script_version = "0.5.0"
 script_namespace = "wenhe.ASSTracker"
 script_url = "https://github.com/WenHe233/WenHe-Aegisub-Scripts"
 

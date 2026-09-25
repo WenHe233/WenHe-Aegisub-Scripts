@@ -61,6 +61,9 @@ def validate_job(job):
         raise ValueError("帧范围无效，或超过第一版的 2400 帧上限。请按镜头分段。")
     if min(job[k] for k in ["video_width", "video_height", "script_width", "script_height"]) <= 0:
         raise ValueError("视频或脚本分辨率无效。")
+    if 'roi' in job or 'roi_polygon' in job:
+        from .regions import parse_region
+        parse_region(job).apply(job)
     if job.get('mode', 'translation') != 'translation':
         aspect = job['script_width'] * job['video_height'] / (job['script_height'] * job['video_width'])
         if abs(aspect-1) > .001:
@@ -179,7 +182,7 @@ def read_reference(job, max_width=1100, cancelled=lambda: False):
         return frames[0].copy()
 
 
-def match_frame(gray, template, previous, radius, threshold=.85, gap_threshold=.025):
+def match_frame(gray, template, previous, radius, threshold=.85, gap_threshold=.025, mask=None):
     h, w = template.shape
     px, py = previous
     left, top = max(0, math.floor(px - radius)), max(0, math.floor(py - radius))
@@ -187,7 +190,10 @@ def match_frame(gray, template, previous, radius, threshold=.85, gap_threshold=.
     bottom = min(gray.shape[0], math.ceil(py + h + radius))
     if right - left < w or bottom - top < h:
         return dict(ok=False, reason="目标离开画面或搜索范围不足")
-    scores = cv2.matchTemplate(gray[top:bottom, left:right], template, cv2.TM_CCOEFF_NORMED)
+    scores = cv2.matchTemplate(gray[top:bottom, left:right], template, cv2.TM_CCOEFF_NORMED, mask=mask)
+    if not np.isfinite(scores).any():
+        return dict(ok=False, reason="搜索范围内没有有效的匹配分数（区域可能为纯色或被遮挡）")
+    scores = np.where(np.isfinite(scores),np.clip(scores,-1,1),-np.inf)
     _, score, _, loc = cv2.minMaxLoc(scores)
     if not np.isfinite(score):
         return dict(ok=False, reason="匹配分数异常")
@@ -195,7 +201,8 @@ def match_frame(gray, template, previous, radius, threshold=.85, gap_threshold=.
     other = scores.copy()
     exclude = max(3, min(w, h) // 8)
     other[max(0, y-exclude):y+exclude+1, max(0, x-exclude):x+exclude+1] = -1
-    second = float(other.max()) if other.size else -1
+    finite_other=other[np.isfinite(other)]
+    second = float(finite_other.max()) if finite_other.size else -1
     gap = score - second
     if score < threshold:
         return dict(ok=False, reason="匹配质量下降（遮挡、形变或位移过大）", score=float(score), gap=gap)
@@ -206,6 +213,7 @@ def match_frame(gray, template, previous, radius, threshold=.85, gap_threshold=.
         (y == scores.shape[0]-1 and bottom < gray.shape[0])):
         return dict(ok=False, reason="匹配落在搜索边界，请扩大搜索半径", score=float(score), gap=gap)
     def refine(a, b, c):
+        if not np.isfinite([a,b,c]).all(): return 0.
         den = a - 2*b + c
         return float(np.clip(.5*(a-c)/den, -.5, .5)) if abs(den) > 1e-6 else 0.
     fx = refine(*scores[y, x-1:x+2]) if 0 < x < scores.shape[1]-1 else 0.
@@ -217,18 +225,29 @@ def track_frames(frames, job, progress=lambda *_: None, cancelled=lambda: False)
     options = job.get("options", {})
     scale_x = frames.shape[2] / job["video_width"]
     scale_y = frames.shape[1] / job["video_height"]
-    roi = job.get("roi")
-    if not isinstance(roi, list) or len(roi) != 4 or any(not isinstance(x, (float, int)) or not math.isfinite(x) for x in roi):
-        raise ValueError("请框选一个追踪区域。")
-    x, y, w, h = roi
-    if min(x, y) < 0 or w <= 0 or h <= 0 or x+w > job["video_width"] or y+h > job["video_height"]:
-        raise ValueError("追踪区域超出视频画面。")
-    x, y, w, h = round(x*scale_x), round(y*scale_y), round(w*scale_x), round(h*scale_y)
+    from .regions import parse_region
+    region = parse_region(job)
+    x, y, w, h = region.bounds
+    mask = None
+    if region.polygon:
+        full_mask = region.mask(frames.shape[1:],(job['video_width'],job['video_height']))
+        yy,xx = np.nonzero(full_mask)
+        if not xx.size: raise ValueError('多边形在分析图中为空，请扩大区域或提高分析宽度。')
+        x,y,w,h = int(xx.min()),int(yy.min()),int(xx.max()-xx.min()+1),int(yy.max()-yy.min()+1)
+        mask=full_mask[y:y+h,x:x+w].copy()
+        if np.count_nonzero(mask)<144: raise ValueError('多边形在分析图中有效面积太小，请扩大区域或提高分析宽度。')
+    else:
+        x, y, w, h = round(x*scale_x), round(y*scale_y), round(w*scale_x), round(h*scale_y)
     if min(w, h) < 12:
         raise ValueError("追踪区域太小；分析图中宽高至少各 12 像素。")
     ref = job["reference_frame"] - job["start_frame"]
     template = frames[ref, y:y+h, x:x+w].copy()
-    if template.std() < 8 or cv2.Laplacian(template, cv2.CV_32F).var() < 3:
+    pixels = template[mask>0] if mask is not None else template
+    edges = cv2.Laplacian(template, cv2.CV_32F)
+    if mask is not None:
+        interior=cv2.erode(mask,np.ones((3,3),np.uint8),borderType=cv2.BORDER_CONSTANT,borderValue=0)>0
+        edges=edges[interior]
+    if not edges.size or pixels.std() < 8 or edges.var() < 3:
         raise ValueError("所选区域细节太少。请包含文字、角点或清楚的边缘。")
     threshold = float(options.get("threshold", .85))
     gap = float(options.get("gap", .025))
@@ -245,7 +264,7 @@ def track_frames(frames, job, progress=lambda *_: None, cancelled=lambda: False)
         for i in sequence:
             if cancelled():
                 raise Cancelled()
-            result = match_frame(frames[i], template, previous, radius, threshold, gap)
+            result = match_frame(frames[i], template, previous, radius, threshold, gap, mask)
             result["frame"] = job["start_frame"] + i
             rows[i] = result
             if not result["ok"]:

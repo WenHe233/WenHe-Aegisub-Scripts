@@ -2,6 +2,7 @@
 import cv2
 import numpy as np
 from .motion import estimate, MODES, LABELS
+from .regions import parse_region
 
 
 def warp(points, matrix):
@@ -19,17 +20,15 @@ def corners(roi):
 
 def track_planar(frames, job, progress, cancelled):
     from .core import Cancelled
-    roi = job.get('roi', [])
-    if len(roi) != 4 or not np.isfinite(roi).all():
-        raise ValueError('请框选同一平面的追踪区域。')
-    x,y,w,h = roi
+    region = parse_region(job)
+    x,y,w,h = region.bounds
     if min(x,y)<0 or min(w,h)<30 or x+w>job['video_width'] or y+h>job['video_height']:
         raise ValueError('透视追踪区域无效或太小。')
     scale = np.diag([frames.shape[2]/job['video_width'], frames.shape[1]/job['video_height'], 1.])
     inverse = np.linalg.inv(scale)
-    quad = warp(corners(roi), scale)
-    mask = np.zeros(frames.shape[1:], np.uint8)
-    cv2.fillConvexPoly(mask, np.round(quad).astype(np.int32), 255)
+    quad = warp(cv2.convexHull(region.points.astype(np.float32)).reshape(-1,2), scale)
+    mask = region.mask(frames.shape[1:],(job['video_width'],job['video_height']))
+    mask_area = np.count_nonzero(mask)
     ref = job['reference_frame']-job['start_frame']
     sift = cv2.SIFT_create(nfeatures=6000, contrastThreshold=.012, edgeThreshold=12)
     keys, descriptors = sift.detectAndCompute(frames[ref], mask)
@@ -70,12 +69,14 @@ def track_planar(frames, job, progress, cancelled):
                 if H is None: raise ValueError('无法求得平面变换')
                 valid=valid.ravel().astype(bool);count=int(valid.sum())
                 if count<12 or count/len(good)<.45: raise ValueError('匹配点不符合单一平面运动')
-                coverage=cv2.contourArea(cv2.convexHull(p[valid]))/max(1,cv2.contourArea(quad.astype(np.float32)))
+                covered=np.zeros_like(mask)
+                cv2.fillConvexPoly(covered,np.round(cv2.convexHull(p[valid])).astype(np.int32),255)
+                coverage=np.count_nonzero(covered & mask)/max(1,mask_area)
                 if coverage<.025: raise ValueError('匹配点过于集中，透视估计不稳定')
                 error=float(np.quantile(np.linalg.norm(warp(p[valid],H)-q[valid],axis=1),.95)/scale[0,0])
                 if error>3: raise ValueError('平面重投影误差过大')
                 projected=warp(quad,H)
-                den=np.c_[quad,np.ones(4)]@H[2]
+                den=np.c_[quad,np.ones(len(quad))]@H[2]
                 area=cv2.contourArea(projected.astype(np.float32),oriented=True)/cv2.contourArea(quad.astype(np.float32),oriented=True)
                 if np.min(den)*np.max(den)<=0 or not cv2.isContourConvex(projected.astype(np.float32)) or not .15<area<6:
                     raise ValueError('平面变换折叠或缩放异常')

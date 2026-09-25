@@ -34,6 +34,29 @@ SCHEMA_URL = (
 REPOSITORY_URL = "https://github.com/WenHe233/WenHe-Aegisub-Scripts"
 RAW_ROOT = "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts"
 ZERO_SHA = "0" * 40
+TRACKER = 'wenhe.ASSTracker'
+
+
+def tracker_changes(base: str, head: str) -> list[str]:
+    if not git_object_exists(base):
+        return []
+    output = run_git('diff','--name-only','--no-renames',base,head,'--',
+                     'apps/ass-tracker','modules/wenhe/ASSTracker*','tools/build_tracker.py')
+    return [p for p in output.splitlines() if not p.endswith('.md') and '/tests/' not in p]
+
+
+def tracker_files(version: str) -> list[dict[str, str]]:
+    prefix = 'modules/wenhe/ASSTracker'
+    paths = [(ROOT/(prefix+'.lua'), '.lua'),
+             (ROOT/'apps/ass-tracker/ass_tracker/VERSION', '/VERSION')]
+    paths += [(p, '/' + p.relative_to(ROOT/prefix).as_posix())
+              for p in sorted((ROOT/prefix).rglob('*')) if p.is_file()]
+    result=[]
+    for path,name in paths:
+        relative=path.relative_to(ROOT).as_posix()
+        result.append(dict(name=name,url=f'{RAW_ROOT}/{TRACKER}-v{version}/{relative}',
+                           localFilePath='./'+relative,sha1=sha1_bytes(path.read_bytes())))
+    return result
 
 REQUIRED_METADATA = (
     "script_name",
@@ -220,6 +243,8 @@ def changed_paths(base: str, head: str) -> tuple[set[str], set[str]]:
             scripts.add(path)
         elif path.startswith("packages/") and path.endswith(".json"):
             packages.add(path)
+    if tracker_changes(base,head):
+        scripts.add(f'macros/{TRACKER}.lua')
     return scripts, packages
 
 
@@ -422,7 +447,8 @@ def synchronize(
     # Recover cleanly when an earlier publishing run failed before creating the
     # feed entry. A script absent from the feed is still an unpublished script,
     # even when its Lua file was introduced by an older commit.
-    missing_feed_namespaces = set(scripts) - set(feed_macros)
+    missing_feed_namespaces = {n for n,m in scripts.items() if n not in feed_macros or
+        parse_semver(feed_macros[n].get('channels',{}).get('stable',{}).get('version','0.0.0')) < m.version_tuple}
     for namespace, metadata in scripts.items():
         if namespace in missing_feed_namespaces:
             changed_scripts.add(metadata.path.relative_to(ROOT).as_posix())
@@ -447,7 +473,7 @@ def synchronize(
                     f"{relative_path} 的版本从 {previous.version} 倒退到 {current.version}。"
                 )
             if current.version_tuple == previous.version_tuple:
-                if current_path.read_bytes() != previous_bytes:
+                if current_path.read_bytes() != previous_bytes or (current.namespace == TRACKER and tracker_changes(base,head)):
                     raise SyncError(
                         f"{relative_path} 内容已变化，但 script_version 仍是 {current.version}。"
                     )
@@ -492,6 +518,27 @@ def synchronize(
             changelogs.get(namespace, []) if namespace in release_namespaces else [],
         )
 
+        extra_files = []
+        if namespace == TRACKER:
+            version_file=ROOT/'apps/ass-tracker/ass_tracker/VERSION'
+            if version_file.read_text(encoding='utf-8').strip()!=metadata.version:
+                raise SyncError('ASS Tracker VERSION 与宏版本不一致。')
+            extra_files=tracker_files(metadata.version)
+            module_release=dict(version=metadata.version,released=effective_date,default=True,files=extra_files,
+                                platforms=['Windows-x64','Windows-x86'])
+            previous_module=feed.get('modules',{}).get(TRACKER,{}).get('channels',{}).get('stable',{})
+            names={f['name'] for f in extra_files}
+            for old in previous_module.get('files',[]):
+                if old['name'] not in names:
+                    module_release['files'].append(dict(old,delete=True))
+            feed.setdefault('modules',{})[TRACKER]=dict(name='ASS 追踪联动组件',author='WenHe',
+                description='JSON、Windows 进程与配套运行包管理',url=REPOSITORY_URL,
+                channels=dict(stable=module_release))
+            release=macros[namespace]['channels']['stable']
+            release['requiredModules']=[dict(moduleName=TRACKER,version=metadata.version,
+                feed=RAW_ROOT+'/main/DependencyControl.json')]
+            release['platforms']=['Windows-x64','Windows-x86']
+
         if namespace in release_namespaces:
             previous_tag = latest_package_tag(namespace)
             notes_range = f"{previous_tag}..{head}" if previous_tag else head
@@ -512,6 +559,10 @@ def synchronize(
                     ),
                     "changelog": changelogs[namespace],
                     "release_notes": release_notes,
+                    "files": [dict(path=metadata.path.relative_to(ROOT).as_posix(),sha1=metadata.sha1,
+                               url=f'{RAW_ROOT}/{namespace}-v{metadata.version}/macros/{namespace}.lua')]+
+                              [dict(sha1=f['sha1'],url=f['url']) for f in extra_files if not f.get('delete')],
+                    "runtime": namespace == TRACKER,
                 }
             )
 

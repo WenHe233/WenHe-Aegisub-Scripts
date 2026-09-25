@@ -2,3 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 .release-plan.json
+build/
+dist/
+.cache/
+*.spec

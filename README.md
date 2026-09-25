@@ -11,6 +11,13 @@
 | 文字渐入渐出 | `wenhe.TextFadeInOut` | 2.1.0 | 用分层 `clip` 生成带柔和边缘的文字渐入、渐出效果 |
 | 套用平移 (`\move`) | `wenhe.ApplyMove` | 1.0.0 | 将参考行的 `\move` 方向、距离和时间套用到其它选中行 |
 | 复制选中行正文 | `wenhe.CopySelectedText` | 1.0.0 | 将选中行的纯文本正文或原始 Text 字段复制到剪贴板 |
+| ASS 追踪 | `wenhe.ASSTracker` | 0.4.0 | 五项联动追踪，支持裁切、绘图和外观缩放，窗口完成后自动回填 |
+
+### ASS 追踪
+
+选中已在参考帧排版的字幕，运行「ASS 追踪 → 开始追踪（自动回填）」，框选目标并追踪，再点「应用并返回 Aegisub」。提供平移、缩放、旋转、斜切、透视五项逐级联动，默认开启前三项。
+
+通过 DependencyControl 安装宏与配套组件后，首次运行自动准备 Windows x64 运行包；无需预装 Python 或 FFmpeg。也可使用 Release 完整包离线安装。详见 [安装、使用和维护文档](apps/ass-tracker/README.md)。
 
 ### 复制选中行正文
 
@@ -62,6 +69,8 @@ https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/main/Dependency
 
 ## 手动安装
 
+**ASS 追踪请使用 Release 完整包内的 `install.ps1`**，它还需要配套模块和运行环境。下面的单文件安装方式适用于其它三个宏。
+
 从 [`macros`](./macros) 下载所需 `.lua` 文件，放入：
 
 ```text
@@ -97,7 +106,9 @@ script_url         = "https://github.com/WenHe233/WenHe-Aegisub-Scripts"
 1. 修改脚本。
 2. 将 `script_version` 递增为新的三段式语义版本。
 3. 用清晰的 Git 提交标题说明变化并推送到 `main`。
-4. GitHub Actions 自动更新 `DependencyControl.json` 的版本、UTC 日期和 SHA-1，提交回 `main`，创建 `<namespace>-v<version>` 标签及 GitHub Release，并验证标签中的 raw 文件。
+4. GitHub Actions 完成 Windows 测试和打包，创建 `<namespace>-v<version>` 标签与 Release，校验源码和运行包后，最后将 `DependencyControl.json` 更新提交回 `main`。
+
+ASS 追踪同时管理 `modules/wenhe/ASSTracker` 组件和 Python 应用，其运行代码、依赖及打包逻辑变更也需要递增版本。完整流程见 [追踪工具维护说明](apps/ass-tracker/README.md#源码运行与维护)。发布失败可重跑：会验证并复用当前提交已上传的完整包，不覆盖不同内容的资产；资产没有通过验证时，线上源保持原版本。
 
 如果脚本内容改变但版本未变、版本倒退、元数据不完整、文件名和命名空间不一致，发布会失败。删除脚本也会失败，必须先设计 DependencyControl 下架或迁移方案。
 

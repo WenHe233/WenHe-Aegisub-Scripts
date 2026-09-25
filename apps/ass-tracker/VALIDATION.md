@@ -36,3 +36,11 @@ python tools/check_portable.py
 ```
 
 GitHub Actions 会在每次 PR／发布中重新执行这些检查。首次发布后的公开资产、SHA-256、DependencyControl 源以及下载缓存链路另外校验；以对应 Actions 运行记录和 Release 的 `release-manifest.json` 为准。
+
+## 正式包安装复验
+
+[0.4.1 发布流水线](https://github.com/WenHe233/WenHe-Aegisub-Scripts/actions/runs/36096165323) 全部通过。发布后再次由启动器从公开 Release 下载完整包并验证 SHA-256、版本及每个运行文件，确认源码提交为 `c7af45147de092b1591817dbfd9a02918f2b7e16`。
+
+公开包在移除外部 Python／FFmpeg PATH 的环境中通过自检，并完成 25 帧合成镜头的追踪；缓存离线启动、图形程序取消和等待退出通过。默认 Aegisub 安装路径、自定义中文路径、原宏备份及旧入口迁移均已实测。DependencyControl 宏及所有模块文件的公开 URL／SHA-1 均重新校验，原有三个宏的源配置未改变。
+
+发布重跑使用已发布的 0.4.0 资产进行实际验证：复用同一提交的包，逐文件及资产校验成功后识别已发布源，没有覆盖资产或重复提交。0.4.1 保持相同发布逻辑。

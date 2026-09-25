@@ -83,6 +83,93 @@
           "feat: 新增复制选中行正文脚本"
         ]
       }
+    },
+    "wenhe.ASSTracker": {
+      "url": "@{baseUrl}/blob/main/macros/@{namespace}.lua",
+      "author": "WenHe",
+      "name": "ASS 追踪",
+      "description": "五项联动平面追踪，支持裁切、绘图和缩放外观，自动回填字幕并保留原行。",
+      "channels": {
+        "stable": {
+          "version": "0.4.0",
+          "released": "2026-09-25",
+          "default": true,
+          "files": [
+            {
+              "name": ".lua",
+              "url": "@{fileBaseUrl}@{fileName}",
+              "sha1": "e2e7a61c77be9459df3a60979be25e41d8bc3d15"
+            }
+          ],
+          "requiredModules": [
+            {
+              "moduleName": "wenhe.ASSTracker",
+              "version": "0.4.0",
+              "feed": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/main/DependencyControl.json"
+            }
+          ],
+          "platforms": [
+            "Windows-x64",
+            "Windows-x86"
+          ]
+        }
+      },
+      "changelog": {
+        "0.4.0": [
+          "发布 0.4.0"
+        ]
+      }
+    }
+  },
+  "modules": {
+    "wenhe.ASSTracker": {
+      "name": "ASS 追踪联动组件",
+      "author": "WenHe",
+      "description": "JSON、Windows 进程与配套运行包管理",
+      "url": "https://github.com/WenHe233/WenHe-Aegisub-Scripts",
+      "channels": {
+        "stable": {
+          "version": "0.4.0",
+          "released": "2026-09-25",
+          "default": true,
+          "files": [
+            {
+              "name": ".lua",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.4.0/modules/wenhe/ASSTracker.lua",
+              "localFilePath": "./modules/wenhe/ASSTracker.lua",
+              "sha1": "e447b6b935ff7d848db2113ad148accc416af07d"
+            },
+            {
+              "name": "/VERSION",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.4.0/apps/ass-tracker/ass_tracker/VERSION",
+              "localFilePath": "./apps/ass-tracker/ass_tracker/VERSION",
+              "sha1": "5939e23a3ae70b3772807378164de7b303073335"
+            },
+            {
+              "name": "/bootstrap.ps1",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.4.0/modules/wenhe/ASSTracker/bootstrap.ps1",
+              "localFilePath": "./modules/wenhe/ASSTracker/bootstrap.ps1",
+              "sha1": "0ca4f3870d8584fd5118f8cfd019e05579764507"
+            },
+            {
+              "name": "/bridge.lua",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.4.0/modules/wenhe/ASSTracker/bridge.lua",
+              "localFilePath": "./modules/wenhe/ASSTracker/bridge.lua",
+              "sha1": "449adee908108b6ce5a72c05124ac3afadbc3733"
+            },
+            {
+              "name": "/json.lua",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.4.0/modules/wenhe/ASSTracker/json.lua",
+              "localFilePath": "./modules/wenhe/ASSTracker/json.lua",
+              "sha1": "916956dc5311deadd022022697362979f2b853c2"
+            }
+          ],
+          "platforms": [
+            "Windows-x64",
+            "Windows-x86"
+          ]
+        }
+      }
     }
   }
 }

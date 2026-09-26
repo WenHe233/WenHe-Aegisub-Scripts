@@ -91,20 +91,20 @@
       "description": "五项联动平面追踪，支持裁切、绘图和缩放外观，自动回填字幕并保留原行。",
       "channels": {
         "stable": {
-          "version": "0.5.0",
-          "released": "2026-09-25",
+          "version": "0.6.0",
+          "released": "2026-09-26",
           "default": true,
           "files": [
             {
               "name": ".lua",
               "url": "@{fileBaseUrl}@{fileName}",
-              "sha1": "7efc950bede36c52667d65f3d5e957771ee1196a"
+              "sha1": "5d2d41e61701030a2a8cccc25e75aa9a1345f71d"
             }
           ],
           "requiredModules": [
             {
               "moduleName": "wenhe.ASSTracker",
-              "version": "0.5.0",
+              "version": "0.6.0",
               "feed": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/main/DependencyControl.json"
             }
           ],
@@ -123,6 +123,9 @@
         ],
         "0.5.0": [
           "feat(tracker): responsive window and editable polygon regions in 0.5.0"
+        ],
+        "0.6.0": [
+          "feat(tracker): runtime download prompt with location and mirror choice in 0.6.0"
         ]
       }
     }
@@ -135,37 +138,37 @@
       "url": "https://github.com/WenHe233/WenHe-Aegisub-Scripts",
       "channels": {
         "stable": {
-          "version": "0.5.0",
-          "released": "2026-09-25",
+          "version": "0.6.0",
+          "released": "2026-09-26",
           "default": true,
           "files": [
             {
               "name": ".lua",
-              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.5.0/modules/wenhe/ASSTracker.lua",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.6.0/modules/wenhe/ASSTracker.lua",
               "localFilePath": "./modules/wenhe/ASSTracker.lua",
               "sha1": "e447b6b935ff7d848db2113ad148accc416af07d"
             },
             {
               "name": "/VERSION",
-              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.5.0/apps/ass-tracker/ass_tracker/VERSION",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.6.0/apps/ass-tracker/ass_tracker/VERSION",
               "localFilePath": "./apps/ass-tracker/ass_tracker/VERSION",
-              "sha1": "5066b1a3735bedaeaeff1016c90608d3b4c8b908"
+              "sha1": "ea9a645c2d60d87ff41893445ae98fd544363a8f"
             },
             {
               "name": "/bootstrap.ps1",
-              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.5.0/modules/wenhe/ASSTracker/bootstrap.ps1",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.6.0/modules/wenhe/ASSTracker/bootstrap.ps1",
               "localFilePath": "./modules/wenhe/ASSTracker/bootstrap.ps1",
-              "sha1": "214105f75845f03001257ab6736aa5249d51a7cb"
+              "sha1": "ac5b4f31d4e267bece0a948f3558becc7578a57b"
             },
             {
               "name": "/bridge.lua",
-              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.5.0/modules/wenhe/ASSTracker/bridge.lua",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.6.0/modules/wenhe/ASSTracker/bridge.lua",
               "localFilePath": "./modules/wenhe/ASSTracker/bridge.lua",
-              "sha1": "449adee908108b6ce5a72c05124ac3afadbc3733"
+              "sha1": "b4a9bd2ff70bb8e90eeb866c4ced7a10c2565082"
             },
             {
               "name": "/json.lua",
-              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.5.0/modules/wenhe/ASSTracker/json.lua",
+              "url": "https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/wenhe.ASSTracker-v0.6.0/modules/wenhe/ASSTracker/json.lua",
               "localFilePath": "./modules/wenhe/ASSTracker/json.lua",
               "sha1": "916956dc5311deadd022022697362979f2b853c2"
             }

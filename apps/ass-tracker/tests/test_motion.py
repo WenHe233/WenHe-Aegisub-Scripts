@@ -62,6 +62,12 @@ class MotionTests(unittest.TestCase):
         for tag in [r'\bord4',r'\shad6',r'\bord2',r'\blur1',r'\be2',r'\xbord6',r'\xshad-8']:
             self.assertIn(tag,value)
         self.assertEqual(local_scale(np.eye(3),[0,0]),1)
+        # \r brings back the target style's unscaled border and shadow.
+        line=dict(text=r'{\an7\pos(30,40)\bord1}T{\rAlt}e{\r}st',metrics=dict(width=100,height=28),
+                  style_data=dict(outline=2,shadow=3),reset_styles=dict(Alt=dict(outline=4,shadow=0)))
+        value=transform(line,H,scale_appearance=True)
+        self.assertIn(r'\rAlt\bord8\fscx',value)
+        self.assertIn(r'\r\bord4\shad6\fscx',value)
 
     def test_render_curves_clips_and_drawing_anchors(self):
         H=np.array([[1.015,.045,4],[-.02,.985,8],[.0002,-.00015,1]])
@@ -74,7 +80,10 @@ class MotionTests(unittest.TestCase):
             cases.append(r'{\an7\pos(0,0)\p1\clip('+path+r')}m 0 0 l 220 0 220 180 0 180')
             cases.append(r'{\an7\pos(0,0)\p1\iclip('+path+r')}m 0 0 l 220 0 220 180 0 180')
         cases += [r'{\an5\pos(130,100)\p2\pbo12\fscx80\fscy110\frz12}m 0 0 l 200 0 200 80 0 80',
-                  r'{\an1\pos(60,140)\org(80,90)\p3\pbo-10\frx8\fry-4\fax.1}m 40 40 b 40 5 160 5 160 40 l 160 120 40 120']
+                  r'{\an1\pos(60,140)\org(80,90)\p3\pbo-10\frx8\fry-4\fax.1}m 40 40 b 40 5 160 5 160 40 l 160 120 40 120',
+                  # Offset from x=0 pins the fay pivot to drawing coordinates.
+                  r'{\an1\pos(10,150)\p1\fscx90\fscy120\fax-.05\fay.15}m 100 20 l 220 20 220 90 100 90',
+                  r'{\an7\pos(20,20)\frz30\r\frz10\p1}m 40 40 l 160 40 160 120 40 120']
         with tempfile.TemporaryDirectory() as td:
             for i,body in enumerate(cases):
                 line=dict(text=body,style_data=dict(align=7))

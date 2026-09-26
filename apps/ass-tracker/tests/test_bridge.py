@@ -8,6 +8,7 @@ import time
 import unittest
 import numpy as np
 import test_macro
+from ass_tracker import __version__
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -74,7 +75,7 @@ class LinkedMacroTests(unittest.TestCase):
             lua=self.setup(td,installed=False)
             self.answer(lua,('开始下载',dict(parent='D:\\追踪 运行包',source='ghfast.top 代理',custom='')))
             lua.execute("macros['ASS 追踪/开始追踪（自动回填）'](subs,{3})")
-            self.assertEqual(lua.eval('checked[1]'),'C:\\Users\\测试\\AppData\\Local\\WenHe\\AegisubScripts\\ASSTracker\\versions|0.6.0')
+            self.assertEqual(lua.eval('checked[1]'),'C:\\Users\\测试\\AppData\\Local\\WenHe\\AegisubScripts\\ASSTracker\\versions|'+__version__)
             self.assertEqual(lua.eval('shown[1].parent'),'C:\\Users\\测试\\AppData\\Local\\WenHe\\AegisubScripts')
             self.assertEqual(lua.eval('shown[1].source'),'GitHub 官方')
             self.assertEqual(lua.eval('started.cache_root'),'D:\\追踪 运行包\\ASSTracker\\versions')
@@ -86,7 +87,7 @@ class LinkedMacroTests(unittest.TestCase):
             lua=self.setup(td,installed=False)
             self.answer(lua,('取消',{}))
             with self.assertRaises(Exception):lua.execute("macros['ASS 追踪/开始追踪（自动回填）'](subs,{3})")
-            self.assertEqual(lua.eval('checked[1]'),'D:\\追踪 运行包\\ASSTracker\\versions|0.6.0')
+            self.assertEqual(lua.eval('checked[1]'),'D:\\追踪 运行包\\ASSTracker\\versions|'+__version__)
             self.assertEqual(lua.eval('shown[1].parent'),'D:\\追踪 运行包')
             self.assertEqual(lua.eval('shown[1].source'),'ghfast.top 代理')
 

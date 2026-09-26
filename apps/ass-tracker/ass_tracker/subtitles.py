@@ -5,6 +5,9 @@ NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)"
 PAIR = re.compile(r"\\(pos|org)\(\s*(" + NUMBER + r")\s*,\s*(" + NUMBER + r")\s*\)")
 CLIP = re.compile(r"\\(i?clip)\(([^()]*)\)")
 BLOCK = re.compile(r"\{([^}]*)\}")
+FADE = re.compile(r"\\fade?\s*\(([^()]*)\)")
+# \r and \r<style> restore style values; the style name runs to the next tag.
+RESET = re.compile(r"\\r[^\\]*")
 
 
 def fmt(n):
@@ -13,9 +16,17 @@ def fmt(n):
 
 def validate_text(text):
     blocks = "".join(m[1] for m in BLOCK.finditer(text))
-    # Time-dependent effects would restart when splitting events.
-    if re.search(r"\\(?:move|t|fad|fade)\s*\(|\\(?:k|K|kf|ko|kt)\d|\\r", blocks):
-        raise ValueError("第一版不支持 move、t、淡入淡出、卡拉 OK 或样式重置。请先展开/移除这些效果。")
+    # Time-dependent effects would restart when splitting events. Fades are
+    # moved back onto the source line's clock by retime().
+    if re.search(r"\\(?:move|t)\s*\(|\\(?:k|K|kf|ko|kt)\d", blocks):
+        raise ValueError("不支持 move、t 或卡拉 OK。请先展开/移除这些效果。")
+    fades = FADE.findall(blocks)
+    if len(re.findall(r"\\fade?\s*\(", blocks)) != len(fades) or len(fades) > 1:
+        raise ValueError("每行最多一个 fad/fade 淡入淡出标签，且括号必须完整。")
+    for value in fades:
+        parts = value.split(",")
+        if len(parts) not in (2, 7) or not all(re.fullmatch(r"\s*[-+]?\d+\s*", p) for p in parts):
+            raise ValueError("淡入淡出需写成 \\fad(淡入,淡出) 或七个整数参数的 \\fade。")
     if len(re.findall(r"\\pos\(", blocks)) != 1:
         raise ValueError("每行必须有且只有一个显式 \\pos(x,y)。请先在参考帧做好位置。")
     if len([m for m in PAIR.finditer(blocks) if m[1] == "pos"]) != 1:
@@ -43,6 +54,27 @@ def translate(text, dx, dy, move_clips=True):
     return BLOCK.sub(block, text)
 
 
+def retime(text, offset, duration):
+    r"""Keep \fad/\fade on the source line's clock after the line is split.
+
+    offset is the event start and duration the length of the source line (ms).
+    Alpha depends only on time differences, so shifting all four times by
+    -offset reproduces every rendered frame.
+    """
+    def fade(m):
+        values = [int(p) for p in m[1].split(",")]
+        if len(values) == 2:
+            values = [255, 0, 255, -1, values[0], values[1], -1]
+        alpha, (t1, t2, t3, t4) = values[:3], values[3:]
+        if t1 == -1 and t4 == -1:  # libass/VSFilter: the two-argument form
+            t1, t3, t4 = 0, duration - t3, duration
+        t1, t2, t3, t4 = (t - offset for t in (t1, t2, t3, t4))
+        if t1 == -1 and t4 == -1:
+            t4 = -2  # Not the two-argument form again; now >= 0 > t4 either way.
+        return "\\fade(" + ",".join(map(str, alpha + [t1, t2, t3, t4])) + ")"
+    return BLOCK.sub(lambda b: "{" + FADE.sub(fade, b[1]) + "}", text)
+
+
 def generate(job, track):
     if any(not row["ok"] for row in track):
         raise ValueError("存在失锁帧，禁止生成可导入的字幕结果。")
@@ -51,6 +83,7 @@ def generate(job, track):
     output = []
     for line in job["lines"]:
         current = None
+        first = len(output)
         for frame in range(line["start_frame"], line["end_frame"]):
             i = frame - job["start_frame"]
             row = track[i]
@@ -75,4 +108,9 @@ def generate(job, track):
             else:
                 current = dict(source_index=line["index"], start_time=start, end_time=end, text=value)
                 output.append(current)
+        # Merge on the untimed text, then put fades back on the source clock.
+        duration = line["end_time"] - line["start_time"]
+        for event in output[first:]:
+            if (event["start_time"], event["end_time"]) != (line["start_time"], line["end_time"]):
+                event["text"] = retime(event["text"], event["start_time"] - line["start_time"], duration)
     return output

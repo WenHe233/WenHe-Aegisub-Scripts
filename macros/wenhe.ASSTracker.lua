@@ -3,7 +3,7 @@
 script_name = "ASS 追踪"
 script_description = "五项联动平面追踪，支持裁切、绘图和缩放外观，自动回填字幕并保留原行。"
 script_author = "WenHe"
-script_version = "0.6.0"
+script_version = "0.6.1"
 script_namespace = "wenhe.ASSTracker"
 script_url = "https://github.com/WenHe233/WenHe-Aegisub-Scripts"
 
@@ -41,17 +41,54 @@ local function info(subs)
     return result
 end
 
+local function trim(text)
+    return (text or ''):match('^%s*(.-)%s*$')
+end
+
 local function valid_text(text)
     local n = 0
     for block in text:gmatch("{(.-)}") do
         local _, count = block:gsub("\\pos%(", "")
         n = n + count
-        if block:match("\\move%(") or block:match("\\t%(") or block:match("\\fad%(") or block:match("\\fade%(")
-           or block:match("\\[kK][fo]?%d") or block:match("\\kt%d") or block:match("\\r") then
-            return false, "第一版不支持 move、t、淡入淡出、卡拉 OK 或样式重置，请先展开这些效果。"
+        if block:match("\\move%(") or block:match("\\t%(")
+           or block:match("\\[kK][fo]?%d") or block:match("\\kt%d") then
+            return false, "不支持 move、t 或卡拉 OK，请先展开这些效果。"
         end
     end
     return n == 1, "每行必须有一个显式 pos 标签。请先在参考帧做好位置。"
+end
+
+-- Font of the first text run: leading override blocks in order, where the
+-- last tag wins, \r restores a style and argument-less tags the line style.
+local function measure_style(text, style, styles)
+    local measure = copy(style)
+    local fields = {fs='fontsize', fsp='spacing', b='bold', i='italic'}
+    local block, rest = text:match('^{(.-)}(.*)$')
+    while block do
+        for tag in block:gmatch('\\([^\\]*)') do
+            tag = trim(tag)
+            local name = tag:match('^r(.*)$')
+            local key, value
+            for _, candidate in ipairs({'fsp', 'fs', 'b', 'i'}) do
+                value = tag:match('^'..candidate..'%s*([%d%.%-]*)$')
+                if value then key = candidate; break end
+            end
+            if name then
+                name = trim(name)
+                measure = copy(name ~= '' and styles[name] or style)
+            elseif tag:match('^fn') then
+                local font = trim(tag:sub(3))
+                measure.fontname = (font ~= '' and font ~= '0') and font or style.fontname
+            elseif fields[key] then
+                local field = fields[key]
+                if value == '' then measure[field] = style[field]
+                elseif field == 'bold' or field == 'italic' then measure[field] = tonumber(value) ~= 0
+                else measure[field] = tonumber(value) or style[field] end
+            end
+        end
+        block, rest = rest:match('^{(.-)}(.*)$')
+    end
+    return measure
 end
 
 local function build_job(subs, selection, linked)
@@ -85,20 +122,20 @@ local function build_job(subs, selection, linked)
         first, last = math.min(first, a), math.max(last, b)
         local entry = {index=index, start_frame=a, end_frame=b}
         for _, field in ipairs(snapshot_fields) do entry[field] = line[field] end
+        -- Styles named by \r<style>; an unknown name falls back to the line style.
+        local reset_styles, referenced = {}, false
+        for block in line.text:gmatch('{(.-)}') do
+            for name in block:gmatch('\\r([^\\]*)') do
+                name = trim(name)
+                if styles[name] then reset_styles[name] = copy(styles[name]); referenced = true end
+            end
+        end
+        if referenced then entry.reset_styles = reset_styles end
         local style = styles[line.style]
         if style then
             entry.style_data = copy(style)
-            local measure = copy(style)
             local head = line.text:match('^{(.-)}') or ''
-            measure.fontname = head:match('\\fn([^\\]+)') or measure.fontname
-            local overrides = {fs='fontsize',fsp='spacing',b='bold',i='italic'}
-            for tag,field in pairs(overrides) do
-                local value = head:match('\\'..tag..'([%d%.%-]+)')
-                if value then
-                    if field=='bold' or field=='italic' then measure[field]=tonumber(value)~=0
-                    else measure[field]=tonumber(value) end
-                end
-            end
+            local measure = measure_style(line.text, style, styles)
             measure.scale_x, measure.scale_y = 100,100
             local plain = line.text:gsub('{.-}',''):gsub('\\h',' ')
             if not plain:match('\\[Nn]') and not head:match('\\p[1-9]') and aegisub.text_extents then
@@ -166,6 +203,19 @@ local function export_job(subs,selection)
     aegisub.dialog.display({{class="label", label="已导出："..path.."\n打开完整包的 ASSTracker.exe（或运行 python -m ass_tracker），加载此任务，框选并追踪。\n计算期间请不要修改这些原行；完成后运行“2. 导入结果”。", x=0,y=0,width=1}}, {"完成"})
 end
 
+local function check_style(subs, name, snapshot)
+    for i=1,#subs do
+        local style = subs[i]
+        if style.class=='style' and style.name==name then
+            for key,value in pairs(snapshot) do
+                if key~='raw' and style[key]~=value then fail('样式在导出后已修改，请重新导出。') end
+            end
+            return
+        end
+    end
+    fail('原样式已丢失，请重新导出。')
+end
+
 local function import_result(subs,path,expected_job)
     path = path or aegisub.dialog.open("选择追踪结果", "", "", "追踪结果|*.result.json", false, true)
     if not path then return end
@@ -205,19 +255,9 @@ local function import_result(subs,path,expected_job)
         if line.start_frame ~= aegisub.frame_from_ms(line.start_time) or line.end_frame ~= aegisub.frame_from_ms(line.end_time) then
             fail('任务的帧范围与当前时间码不一致，可能来自旧版导出。请使用新版宏重新导出并追踪。')
         end
-        if line.style_data then
-            local matched = false
-            for i=1,#subs do
-                local style = subs[i]
-                if style.class=='style' and style.name==line.style then
-                    matched = true
-                    for key,value in pairs(line.style_data) do
-                        if key~='raw' and style[key]~=value then fail('样式在导出后已修改，请重新导出。') end
-                    end
-                    break
-                end
-            end
-            if not matched then fail('原样式已丢失，请重新导出。') end
+        if line.style_data then check_style(subs, line.style, line.style_data) end
+        for name, snapshot in pairs(type(line.reset_styles)=='table' and line.reset_styles or {}) do
+            check_style(subs, name, snapshot)
         end
         if type(line.index) ~= "number" or sources[line.index] or line.index < 1 or line.index > #subs then fail("原行索引无效。") end
         local current = subs[line.index]
@@ -278,10 +318,6 @@ local download_sources = {
     {label='自定义代理前缀', custom=true},
 }
 local settings_name = 'wenhe.ASSTracker.runtime.json'
-
-local function trim(text)
-    return (text or ''):match('^%s*(.-)%s*$')
-end
 
 local function cache_root(parent)
     return (parent:gsub('[\\/]+$',''))..'\\ASSTracker\\versions'

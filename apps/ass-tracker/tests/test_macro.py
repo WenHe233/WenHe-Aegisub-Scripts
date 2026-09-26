@@ -123,5 +123,36 @@ class MacroTests(unittest.TestCase):
             self.assertEqual(lua.eval('#subs'),5)
             self.assertFalse(lua.eval('subs[3].comment'))
 
+    def test_reset_styles_fades_and_measured_font(self):
+        with tempfile.TemporaryDirectory() as td:
+            lua=self.setup_lua(td)
+            lua.execute(r'''
+            table.insert(subs,{class='style',name='Screen',fontname='Arial',fontsize=28,scale_x=100,scale_y=100,angle=0,align=7,bold=false,italic=false,spacing=0})
+            table.insert(subs,{class='style',name='Alt',fontname='Georgia',fontsize=40,scale_x=100,scale_y=100,angle=0,align=7,bold=true,italic=false,spacing=0})
+            subs[3].text=[[{\pos(100,120)\fad(100,100)\fs60}{\rAlt\i1}测{\r\rMissing}试]]
+            measured={}
+            aegisub.text_extents=function(style,text) table.insert(measured,style); return 60,28,5 end
+            macros['ASS 追踪/1. 导出选中行'](subs,{3})
+            ''')
+            # The first run uses Alt after \r, then \i1; \fs60 before \r no longer applies.
+            self.assertEqual([lua.eval('measured[1].'+k) for k in ('fontname','fontsize','bold','italic')],['Georgia',40,True,True])
+            job=json.loads((Path(td)/'selection.job.json').read_text(encoding='utf-8'))
+            self.assertEqual(list(job['lines'][0]['reset_styles']),['Alt'])
+            self.assertEqual(job['lines'][0]['reset_styles']['Alt']['fontname'],'Georgia')
+            tail=r'\fs60}{\rAlt\i1}测{\r\rMissing}试'
+            result=dict(schema='ass-tracker-result-v1',job_id=job['job_id'],status='complete',job=job,
+                        generated=[dict(source_index=3,start_time=160,end_time=240,text=r'{\pos(100,120)\fade(255,0,255,0,100,60,160)'+tail),
+                                   dict(source_index=3,start_time=240,end_time=320,text=r'{\pos(110,120)\fade(255,0,255,-80,20,-20,80)'+tail)])
+            (Path(td)/'output.result.json').write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
+            # A style named by \r changing after export invalidates the result.
+            lua.execute('subs[6].fontsize=41')
+            with self.assertRaises(Exception):lua.execute("macros['ASS 追踪/2. 导入结果'](subs)")
+            self.assertEqual(lua.eval('#subs'),6)
+            lua.execute('subs[6].fontsize=40')
+            lua.execute("macros['ASS 追踪/2. 导入结果'](subs)")
+            self.assertEqual(lua.eval('#subs'),8)
+            self.assertTrue(lua.eval('subs[3].comment'))
+            self.assertIn(r'\fade(255,0,255,-80,20,-20,80)',lua.eval('subs[5].text'))
+
 
 if __name__=='__main__':unittest.main()

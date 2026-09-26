@@ -88,6 +88,9 @@ def validate_job(job):
             raise ValueError("字幕行持续时间无效。")
         try:
             validate_text(line["text"])
+            styles = line.get('reset_styles')
+            if styles is not None and not (isinstance(styles, dict) and all(isinstance(s, dict) for s in styles.values())):
+                raise ValueError('reset_styles 必须是以样式名为键的对象。')
             if job.get('mode', 'translation') != 'translation':
                 from .perspective import validate_line
                 validate_line(line)

@@ -7,7 +7,9 @@ import unittest
 import cv2
 import numpy as np
 from ass_tracker.core import track_frames, run_job, decoded_frames, validate_job, Cancelled
-from ass_tracker.subtitles import translate, generate, validate_text
+from ass_tracker.subtitles import translate, generate, validate_text, retime
+
+header='[Script Info]\nScriptType: v4.00+\nPlayResX: 320\nPlayResY: 240\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,28,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
 
 
 def fixture():
@@ -93,9 +95,30 @@ class SubtitleTests(unittest.TestCase):
         self.assertIn(r'\clip(2,m 20 40 l 60 80)',translate(value,5,-3,False))
 
     def test_time_dependent_tags_rejected(self):
-        for tag in [r'\move(0,0,1,1)',r'\t(0,10,\fs40)',r'\fad(10,10)',r'\k20',r'\rScreen']:
+        for tag in [r'\move(0,0,1,1)',r'\t(0,10,\fs40)',r'\k20',r'\fad(1,2,3)',r'\fad(10.5,10)',r'\fad(10,10)\fade(1,2)']:
             with self.assertRaises(ValueError):validate_text(r'{\pos(1,2)'+tag+'}x')
         with self.assertRaises(ValueError):validate_text('unpositioned')
+        for tag in [r'\fad(10,10)',r'\fade(255,0,255,0,10,20,30)',r'\rScreen',r'\r']:
+            validate_text(r'{\pos(1,2)'+tag+'}x')
+
+    def test_fade_keeps_source_clock(self):
+        frames, _, job = fixture()
+        job['lines'][0]['text'] = r'{\pos(100,120)\fad(100,150)}test'
+        events = generate(job, track_frames(frames, job))
+        self.assertEqual(len(events), 4)  # Held frames still merge.
+        for event in events:
+            s = event['start_time']-1000
+            self.assertIn(rf'\fade(255,0,255,{-s},{100-s},{120-s},{270-s})', event['text'])
+        still = [dict(ok=True, dx=0., dy=0.) for _ in range(6)]
+        self.assertEqual(generate(job, still)[0]['text'], job['lines'][0]['text'])
+        # libass reads a 7-argument fade with t1 = t4 = -1 as the two-argument form.
+        self.assertEqual(retime(r'{\pos(1,2)\fade(10,200,30,-1,40,50,-1)}x',100,300),
+                         r'{\pos(1,2)\fade(10,200,30,-100,-60,150,200)}x')
+        self.assertEqual(retime(r'{\fade(0,255,0,99,99,99,99)}x',100,300),r'{\fade(0,255,0,-1,-1,-1,-2)}x')
+
+    def test_reset_is_kept_in_translation(self):
+        value = r'{\pos(1,2)\frz10}A{\rAlt\c&H0000FF&}B'
+        self.assertEqual(translate(value,3,4),r'{\pos(4,6)\frz10}A{\rAlt\c&H0000FF&}B')
 
     def test_zero_motion_preserves_all_text(self):
         value = r'{\pos(2.500,3)\frz-12\blur0.35}中文\Ntest'
@@ -126,9 +149,23 @@ class VideoIntegrationTests(unittest.TestCase):
             self.assertEqual(len(result['track']),6)
             self.assertEqual(result['generated'][0]['start_time'],1000)
 
+    def test_split_fade_renders_like_source_line(self):
+        def frame(start,end,text,at):
+            with tempfile.TemporaryDirectory() as td:
+                (Path(td)/'f.ass').write_text(header+f'Dialogue: 0,{start},{end},Default,,0,0,0,,{text}\n',encoding='utf-8')
+                p=subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=black:s=320x240:r=100','-vf','ass=f.ass','-ss',str(at),
+                                  '-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','-'],cwd=td,capture_output=True,check=True)
+                return np.frombuffer(p.stdout,np.uint8).reshape(240,320,3)
+        text=r'{\an7\pos(40,40)\fad(400,600)}Track'
+        opaque=frame('0:00:00.00','0:00:02.00',text,.7)
+        for start,end,at in [(100,500,.25),(1500,2000,1.6)]:
+            source=frame('0:00:00.00','0:00:02.00',text,at)
+            self.assertFalse(np.array_equal(source,opaque))  # Mid-fade, not a trivial comparison.
+            split=frame(f'0:00:{start/1000:05.2f}',f'0:00:{end/1000:05.2f}',retime(text,start,2000),at)
+            np.testing.assert_array_equal(split,source)
+
     def test_projective_text_and_drawing_translate_pixel_exactly(self):
         # Moving both pos and org is required even for a translation-only track.
-        header='[Script Info]\nScriptType: v4.00+\nPlayResX: 320\nPlayResY: 240\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,28,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
         text=r'{\an7\pos(70,70)\org(90,90)\frz15\frx8\fry-5}Track'
         with tempfile.TemporaryDirectory() as td:
             images=[]

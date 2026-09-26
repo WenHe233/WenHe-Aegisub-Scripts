@@ -47,6 +47,7 @@ class MacroTests(unittest.TestCase):
           ms_from_frame=function(f) return f*40-20 end,
           cancel=function() error('CANCELLED') end,
           set_undo_point=function()undo_count=undo_count+1 end,
+          decode_path=function(p) return (p:gsub('^%?user',module_dir)) end,
           dialog={
             open=function()return result_path end,
             save=function()return job_path end,

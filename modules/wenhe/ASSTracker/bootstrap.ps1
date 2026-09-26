@@ -3,6 +3,8 @@ param(
     [string]$SessionDir,
     [string]$OfflineBundle,
     [string]$CacheRoot = (Join-Path $env:LOCALAPPDATA 'WenHe\AegisubScripts\ASSTracker\versions'),
+    [string]$Mirror = '',
+    [string]$ReleaseBaseUrl = 'https://github.com/WenHe233/WenHe-Aegisub-Scripts/releases/download',
     [switch]$PrepareOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -42,13 +44,80 @@ function Test-Runtime([string]$Directory) {
     return $manifest
 }
 
+# Session files for the Aegisub macro: one progress line, and a cancel request.
+function Write-Stage([string]$Text) {
+    if (-not $SessionDir) { return }
+    try { [IO.File]::WriteAllText((Join-Path $SessionDir 'progress'), $Text, [Text.UTF8Encoding]::new($false)) } catch { }
+}
+function Test-Cancelled {
+    return [bool]($SessionDir -and [IO.File]::Exists((Join-Path $SessionDir 'cancel')))
+}
+
+function Open-Response([string]$Url, [int]$ConnectSeconds, [int]$ReadSeconds) {
+    $request = [Net.HttpWebRequest]::Create($Url)
+    $request.Timeout = $ConnectSeconds * 1000
+    $request.ReadWriteTimeout = $ReadSeconds * 1000
+    $request.UserAgent = "WenHe-ASSTracker/$Version"
+    return $request.GetResponse()
+}
+function Get-Json([string]$Url, [int]$TimeoutSeconds) {
+    # Read bytes and parse locally; mirrors do not agree on the Content-Type.
+    $response = Open-Response $Url $TimeoutSeconds $TimeoutSeconds
+    try {
+        $stream = $response.GetResponseStream()
+        $memory = New-Object IO.MemoryStream
+        $buffer = New-Object byte[] 65536
+        while (($read = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            if ($memory.Length + $read -gt 65536) { throw 'Release manifest is too large.' }
+            $memory.Write($buffer, 0, $read)
+        }
+        return [Text.Encoding]::UTF8.GetString($memory.ToArray()).TrimStart([char]0xFEFF) | ConvertFrom-Json
+    } finally { $response.Close() }
+}
+function Save-Download([string]$Url, [string]$Path, [long]$Size, [string]$ManifestSource) {
+    $response = Open-Response $Url 30 60
+    try {
+        if ($response.ContentLength -ge 0 -and $response.ContentLength -ne $Size) { throw 'Download size differs from the release manifest.' }
+        $stream = $response.GetResponseStream()
+        $file = [IO.File]::Create($Path)
+        try {
+            $buffer = New-Object byte[] 1048576
+            $done = [long]0
+            $clock = [Diagnostics.Stopwatch]::StartNew()
+            Write-Stage "download 0 $Size $ManifestSource"
+            while (($read = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                $done += $read
+                if ($done -gt $Size) { throw 'Download is larger than the release manifest.' }
+                $file.Write($buffer, 0, $read)
+                if ($clock.ElapsedMilliseconds -ge 250) {
+                    $clock.Restart()
+                    if (Test-Cancelled) { throw [OperationCanceledException]::new('Download cancelled.') }
+                    Write-Stage "download $done $Size $ManifestSource"
+                }
+            }
+            Write-Stage "download $done $Size $ManifestSource"
+        } finally { $file.Dispose() }
+    } finally { $response.Close() }
+}
+
 $stage = $null
+$phase = 'prepare'
 try {
     if (-not [Environment]::Is64BitOperatingSystem) { throw 'Windows x64 is required.' }
+    # HTTPS only; plain HTTP is accepted solely on loopback for local tests.
+    $origin = '(https://[A-Za-z0-9.-]+(:\d{1,5})?|http://127\.0\.0\.1:\d{1,5})(/[A-Za-z0-9._~%-]+)*'
+    if ($Mirror -and $Mirror -notmatch "^$origin/$") { throw 'Invalid mirror prefix.' }
+    if ($ReleaseBaseUrl -notmatch "^$origin$") { throw 'Invalid release URL.' }
     $CacheRoot = [IO.Path]::GetFullPath($CacheRoot)
     New-Item -ItemType Directory -Force -Path $CacheRoot | Out-Null
     $destination = Assert-ChildPath $CacheRoot $Version
     if (-not (Test-Path -LiteralPath $destination)) {
+        # Remove partial downloads left by a crash or a killed process tree.
+        foreach ($old in Get-ChildItem -LiteralPath $CacheRoot -Directory -Force) {
+            if ($old.Name -match '^\.staging-[a-f0-9]{32}$' -and $old.LastWriteTimeUtc -lt [DateTime]::UtcNow.AddHours(-24)) {
+                try { Remove-Item -LiteralPath $old.FullName -Recurse -Force } catch { }
+            }
+        }
         $stageName = '.staging-' + [guid]::NewGuid().ToString('N')
         $stage = Assert-ChildPath $CacheRoot $stageName
         New-Item -ItemType Directory -Path $stage | Out-Null
@@ -60,13 +129,26 @@ try {
             New-Item -ItemType Directory -Path $unpacked | Out-Null
             Get-ChildItem -LiteralPath $bundle -Force | Copy-Item -Destination $unpacked -Recurse
         } else {
-            $base = "https://github.com/WenHe233/WenHe-Aegisub-Scripts/releases/download/wenhe.ASSTracker-v$Version"
-            $release = Invoke-RestMethod -Uri "$base/release-manifest.json" -TimeoutSec 60
+            $official = "$ReleaseBaseUrl/wenhe.ASSTracker-v$Version"
+            Write-Stage 'manifest'
+            # The manifest carries the trusted SHA-256. Prefer GitHub directly even
+            # when the large archive comes through a third-party mirror.
+            $manifestSource = 'github'
+            if ($Mirror) {
+                try { $release = Get-Json "$official/release-manifest.json" 15 }
+                catch {
+                    $manifestSource = 'mirror'
+                    $release = Get-Json "$Mirror$official/release-manifest.json" 60
+                }
+            } else { $release = Get-Json "$official/release-manifest.json" 60 }
             $asset = "wenhe.ASSTracker-$Version-Windows-x64.zip"
+            $size = $release.size
             if ($release.schema -ne 1 -or $release.version -ne $Version -or $release.platform -ne 'Windows-x64' -or
-                $release.asset -ne $asset -or $release.sha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid release manifest.' }
-            Invoke-WebRequest -UseBasicParsing -Uri "$base/$asset" -OutFile $archive -TimeoutSec 900
-            if ((Get-Item -LiteralPath $archive).Length -ne $release.size -or
+                $release.asset -ne $asset -or $release.sha256 -notmatch '^[a-f0-9]{64}$' -or
+                -not ($size -is [int] -or $size -is [long]) -or $size -le 0 -or $size -gt 4GB) { throw 'Invalid release manifest.' }
+            Save-Download "$Mirror$official/$asset" $archive $size $manifestSource
+            Write-Stage 'verify'
+            if ((Get-Item -LiteralPath $archive).Length -ne $size -or
                 (Get-SHA256 $archive) -ne $release.sha256) { throw 'Download checksum mismatch.' }
             $unpacked = Join-Path $stage 'unpacked'
             $zip = [IO.Compression.ZipFile]::OpenRead($archive)
@@ -81,8 +163,10 @@ try {
         else { Move-Item -LiteralPath $unpacked -Destination $destination }
     }
     Test-Runtime $destination | Out-Null
+    $phase = 'launch'
     if (-not $PrepareOnly) {
         if (-not $SessionDir) { throw 'Session directory is required.' }
+        Write-Stage 'launch'
         $job = Get-Content -LiteralPath (Join-Path $SessionDir 'job.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($job.tool_version -and $job.tool_version -ne $Version) { throw 'Job version mismatch.' }
         # Windows PowerShell does not wait for a GUI-subsystem executable invoked
@@ -102,10 +186,13 @@ try {
     }
     Write-Output $destination
 } catch {
+    # Exit codes: 1 tracking window failed, 3 runtime download/verification failed, 4 cancelled.
+    if ($_.Exception -is [OperationCanceledException]) { exit 4 }
     if ($SessionDir -and (Test-Path -LiteralPath $SessionDir -PathType Container)) {
         [IO.File]::AppendAllText((Join-Path $SessionDir 'error.log'), ($_ | Out-String), [Text.UTF8Encoding]::new($false))
     }
-    Write-Error $_
+    Write-Error $_ -ErrorAction Continue
+    if ($phase -eq 'prepare') { exit 3 }
     exit 1
 } finally {
     if ($stage -and (Test-Path -LiteralPath $stage)) {

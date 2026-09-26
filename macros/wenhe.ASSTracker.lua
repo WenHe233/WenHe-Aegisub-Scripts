@@ -3,7 +3,7 @@
 script_name = "ASS 追踪"
 script_description = "五项联动平面追踪，支持裁切、绘图和缩放外观，自动回填字幕并保留原行。"
 script_author = "WenHe"
-script_version = "0.5.0"
+script_version = "0.6.0"
 script_namespace = "wenhe.ASSTracker"
 script_url = "https://github.com/WenHe233/WenHe-Aegisub-Scripts"
 
@@ -269,23 +269,173 @@ local function import_result(subs,path,expected_job)
     aegisub.set_undo_point("ASS 追踪：应用结果")
 end
 
+-- Prefixes are prepended to the full GitHub URL (ghproxy style).
+local download_sources = {
+    {label='GitHub 官方', prefix=''},
+    {label='ghfast.top 代理', prefix='https://ghfast.top/'},
+    {label='gh-proxy.com 代理', prefix='https://gh-proxy.com/'},
+    {label='ghproxy.net 代理', prefix='https://ghproxy.net/'},
+    {label='自定义代理前缀', custom=true},
+}
+local settings_name = 'wenhe.ASSTracker.runtime.json'
+
+local function trim(text)
+    return (text or ''):match('^%s*(.-)%s*$')
+end
+
+local function cache_root(parent)
+    return (parent:gsub('[\\/]+$',''))..'\\ASSTracker\\versions'
+end
+
+local function absolute(path)
+    return path:match('^%a:[\\/]') ~= nil or path:match('^[\\/][\\/][^\\/]') ~= nil
+end
+
+local function mirror_prefix(text)
+    -- Same rule as bootstrap.ps1: HTTPS host, optional port, plain path segments.
+    text = trim(text)
+    if text ~= '' and not text:match('/$') then text = text..'/' end
+    local rest = text:match('^https://[%w%.%-]+(.*)$')
+    if not rest then return nil end
+    rest = rest:gsub('^:%d%d?%d?%d?%d?/', '/')
+    if rest:gsub('[%w%._~%%%-]+/', '') ~= '/' then return nil end
+    return text
+end
+
+local function load_settings()
+    local file = io.open(aegisub.decode_path('?user/config')..'/'..settings_name, 'rb')
+    if not file then return {} end
+    local raw = file:read('*a'); file:close()
+    local ok, value = pcall(json.decode, raw)
+    return ok and type(value) == 'table' and value or {}
+end
+
+local function save_settings(bridge, value)
+    -- Remembering the choice is a convenience; a failure must not block the download.
+    pcall(function()
+        local directory = aegisub.decode_path('?user/config')
+        bridge.make_directory(directory)
+        local file = assert(io.open(directory..'/'..settings_name, 'wb'))
+        file:write(json.encode(value)); file:close()
+    end)
+end
+
+local function choose_runtime(bridge)
+    local saved = load_settings()
+    local parents = {}
+    if type(saved.parent) == 'string' and absolute(saved.parent) then parents[1] = saved.parent end
+    parents[#parents+1] = bridge.local_app_data()..'\\WenHe\\AegisubScripts'
+    for _, parent in ipairs(parents) do
+        if bridge.runtime_present(cache_root(parent), script_version) then
+            return {cache_root=cache_root(parent), download=false}
+        end
+    end
+    local labels = {}
+    for i, source in ipairs(download_sources) do labels[i] = source.label end
+    local values = {parent=parents[1], source=labels[1], custom=type(saved.custom_prefix) == 'string' and saved.custom_prefix or ''}
+    for _, label in ipairs(labels) do
+        if label == saved.source then values.source = label end
+    end
+    local message
+    while true do
+        local dialog = {
+            {class='label', x=0, y=0, width=4, label='ASS 追踪 '..script_version..' 需要先下载配套运行包，大小一百多 MB，包含 Python 和 FFmpeg。\n下载后会校验 SHA-256，以后可以离线使用。'},
+            {class='label', x=0, y=1, label='保存位置'},
+            {class='edit', name='parent', x=1, y=1, width=3, text=values.parent},
+            {class='label', x=1, y=2, width=3, label='运行包会放在这个文件夹下的 ASSTracker\\versions\\'..script_version..' 中。'},
+            {class='label', x=0, y=3, label='下载源'},
+            {class='dropdown', name='source', x=1, y=3, width=3, items=labels, value=values.source},
+            {class='label', x=0, y=4, label='自定义前缀'},
+            {class='edit', name='custom', x=1, y=4, width=3, text=values.custom, hint='例如 https://example.com/，只在下载源选“自定义代理前缀”时使用'},
+            {class='label', x=0, y=5, width=4, label='代理由第三方提供。校验清单会先直连 GitHub 获取，连不上时才经代理获取。'},
+        }
+        if message then dialog[#dialog+1] = {class='label', x=0, y=6, width=4, label=message} end
+        local button, result = aegisub.dialog.display(dialog, {'开始下载', '选择文件夹…', '取消'}, {ok='开始下载', cancel='取消'})
+        if not button or button == '取消' then aegisub.cancel() end
+        values = {parent=trim(result.parent), source=result.source, custom=trim(result.custom)}
+        message = nil
+        if button == '选择文件夹…' then
+            local picked = aegisub.dialog.save('进入要保存运行包的文件夹，然后点保存', values.parent, '在此文件夹保存运行包', '文件夹|*.*', true)
+            local folder = picked and picked:match('^(.*)[\\/][^\\/]*$')
+            if folder then values.parent = folder:match('^%a:$') and folder..'\\' or folder end
+        else
+            local source
+            for _, item in ipairs(download_sources) do
+                if item.label == values.source then source = item end
+            end
+            local prefix = source and (source.custom and mirror_prefix(values.custom) or source.prefix)
+            if not absolute(values.parent) then message = '保存位置必须是完整路径，例如 D:\\Aegisub。'
+            elseif not source then message = '请选择下载源。'
+            elseif not prefix then message = '自定义前缀必须以 https:// 开头，只含域名和路径，例如 https://example.com/。'
+            else
+                save_settings(bridge, {parent=values.parent, source=source.label, custom_prefix=values.custom})
+                return {cache_root=cache_root(values.parent), mirror=prefix, source=source.label, download=true}
+            end
+        end
+    end
+end
+
+local window_hint = '窗口打开后框选并追踪，点击“应用并返回 Aegisub”；关闭窗口可取消。'
+
+local function show_download_progress(session, setup)
+    -- bootstrap.ps1 rewrites one line: "download <bytes> <total> <github|mirror>", "verify" or "launch".
+    local file = io.open(session..'/progress', 'rb')
+    if not file then return end
+    local line = file:read('*l') or ''; file:close()
+    local stage, done, total, origin = line:match('^(%a+) ?(%d*) ?(%d*) ?(%a*)')
+    if stage == 'download' then
+        done, total = tonumber(done), tonumber(total)
+        if not done or not total or total <= 0 then return end
+        aegisub.progress.set(math.min(100, done*100/total))
+        aegisub.progress.task(string.format('已下载 %.1f / %.1f MB，下载源：%s。%s', done/1048576, total/1048576, setup.source,
+            origin == 'mirror' and 'GitHub 直连失败，校验清单来自代理。' or '校验清单来自 GitHub 官方。'))
+    elseif stage == 'verify' then
+        aegisub.progress.set(100)
+        aegisub.progress.task('下载完成，正在校验并解压运行包…')
+    elseif stage == 'launch' then
+        aegisub.progress.title('ASS 追踪：打开追踪窗口')
+        aegisub.progress.task(window_hint)
+        return stage
+    end
+end
+
+local function first_error(session)
+    local file = io.open(session..'/error.log', 'rb')
+    if not file then return '未知错误' end
+    local raw = file:read('*a'); file:close()
+    local line = raw:match('([^\r\n]*%S[^\r\n]*)') or '未知错误'
+    -- Keep the dialog short; drop a UTF-8 sequence cut by the byte limit.
+    if #line > 300 then line = line:sub(1, 300):gsub('[\192-\255][\128-\191]*$', '')..'…' end
+    return line
+end
+
 local function linked_track(subs,selection)
     local ok,bridge=pcall(require,'wenhe.ASSTracker.bridge')
     if not ok then fail('无法加载联动组件：'..tostring(bridge)) end
     local job=build_job(subs,selection,true)
     if not job then return end
+    local setup=choose_runtime(bridge)
     local created,session=pcall(bridge.session)
     if not created then fail(tostring(session)) end
     local file,err=io.open(session..'/job.json','wb')
     if not file then bridge.cleanup(session);fail('无法创建追踪任务：'..tostring(err)) end
     file:write(json.encode(job));file:close()
-    local started,process=pcall(bridge.start,runtime.directory,session,script_version)
+    local started,process=pcall(bridge.start,runtime.directory,session,script_version,setup)
     if not started then bridge.cleanup(session);fail(tostring(process)) end
-    aegisub.progress.title('ASS 追踪：准备并打开追踪窗口')
-    aegisub.progress.task('首次运行会下载配套环境。窗口打开后框选并追踪，点击“应用并返回 Aegisub”；关闭窗口可取消。')
+    local downloading=setup.download
+    if downloading then
+        aegisub.progress.title('ASS 追踪：下载运行包')
+        aegisub.progress.task('正在获取校验清单…')
+    else
+        aegisub.progress.title('ASS 追踪：打开追踪窗口')
+        aegisub.progress.task('正在校验运行包。'..window_hint)
+    end
     local cancelled=false
     local cancel_ticks=0
+    local ticks=0
     while true do
+        ticks=ticks+1
+        if downloading and ticks%5==1 and show_download_progress(session,setup)=='launch' then downloading=false end
         if aegisub.progress.is_cancelled() then
             if not cancelled then
                 local signal=io.open(session..'/cancel','wb')
@@ -299,7 +449,10 @@ local function linked_track(subs,selection)
         if code~=nil or cancel_ticks>=50 then
             bridge.close(process) -- also closes any remaining owned FFmpeg child
             if cancelled then bridge.cleanup(session);aegisub.cancel() end
-            if code~=0 then
+            if code==3 then
+                fail('运行包下载或校验失败，未更改字幕：'..first_error(session)..
+                     '\n可以重新运行并换一个下载源，或使用 Release 完整包离线安装。诊断日志：'..session..'/error.log')
+            elseif code~=0 then
                 fail('追踪窗口异常退出，未更改字幕。诊断日志：'..session..'/error.log')
             end
             break

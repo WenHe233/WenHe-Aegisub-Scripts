@@ -6,9 +6,23 @@
 
 ## 安装
 
-推荐从仓库的 DependencyControl 源安装 `ASS 追踪`，宏和联动组件会一同安装。首次点击追踪会下载匹配版本的完整运行包，并校验 SHA-256；首次下载期间 Aegisub 进度窗口可以取消。以后使用缓存可离线运行。
+推荐从仓库的 DependencyControl 源安装 `ASS 追踪`，宏和联动组件会一同安装。首次点击追踪时下载匹配版本的完整运行包，以后使用缓存可离线运行。
 
 源地址：`https://raw.githubusercontent.com/WenHe233/WenHe-Aegisub-Scripts/main/DependencyControl.json`
+
+### 下载运行包（0.6.0）
+
+点击「开始追踪」时，如果找不到当前版本的运行包，会先弹出下载提示框。运行包约 160 MB，包含 Python 和 FFmpeg。
+
+- 保存位置：默认 `%LOCALAPPDATA%\WenHe\AegisubScripts`。可以直接输入完整路径，也可以点「选择文件夹…」，进入目标文件夹后点保存。运行包放在所选文件夹下的 `ASSTracker\versions\版本` 中。
+- 下载源：GitHub 官方、ghfast.top 代理、gh-proxy.com 代理、ghproxy.net 代理，或自定义代理前缀。下载地址由「代理前缀＋完整 GitHub 地址」组成。内置代理失效时，可以把其他同类服务的前缀填入自定义前缀，前缀必须以 `https://` 开头，例如 `https://example.com/`。
+- 点「开始下载」开始下载；点「取消」或按 Esc 不做任何修改。
+
+代理由第三方提供。用于比对 SHA-256 的 `release-manifest.json` 先直连 GitHub 获取，15 秒内连不上才改从代理获取，进度窗口会注明清单来源。清单来自 GitHub 时，被代理替换过的压缩包无法通过校验；清单也来自代理时，校验只能发现下载损坏。
+
+下载期间进度窗口显示已下载的大小。取消下载会删除下载了一半的文件。下载或校验失败时字幕不变，错误提示会给出原因，可以重新运行并换一个下载源。
+
+提示框会记住上次选择的位置和下载源，保存在 `%APPDATA%\Aegisub\config\wenhe.ASSTracker.runtime.json`；便携版 Aegisub 保存在程序目录的 `config` 中。每个版本单独缓存，所以升级版本后会再次弹出提示框。已保存的位置或默认位置中已有当前版本时直接使用，不再询问。
 
 也可以从 [Releases](https://github.com/WenHe233/WenHe-Aegisub-Scripts/releases) 下载 `wenhe.ASSTracker-版本-Windows-x64.zip`，完整解压，在 PowerShell 中运行：
 
@@ -20,7 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -AutomationRoo
 
 安装器先验证并缓存完整包，再安装宏与组件；已有文件备份到自动化目录的 `backups`。旧 `ass_tracker.lua` 入口会移入备份以避免重复菜单。之后重新扫描自动化脚本或重启 Aegisub。
 
-运行缓存：`%LOCALAPPDATA%\WenHe\AegisubScripts\ASSTracker\versions\版本`。不同版本分别缓存，升级失败不会覆盖旧运行包。宏、模块和程序需使用同一版本。校验失败时重新下载完整包，并将损坏版本目录移走后重装；不要混用新旧组件。
+运行缓存：默认为 `%LOCALAPPDATA%\WenHe\AegisubScripts\ASSTracker\versions\版本`，自选位置时为 `所选文件夹\ASSTracker\versions\版本`；`install.ps1` 总是安装到默认位置。不同版本分别缓存，升级失败不会覆盖旧运行包。宏、模块和程序需使用同一版本。校验失败时重新下载完整包，并将损坏版本目录移走后重装；不要混用新旧组件。
 
 ## 使用
 
@@ -88,7 +102,7 @@ ASS 每段文字只有一组描边／模糊值，因此非等比缩放及透视�
 - 一次最多 2400 帧，解码缓存最多 768 MiB。按镜头分段；不同出现时间的消息分开处理。
 - 低帧率动画有重复帧或突然跳动时，选择辨识度高的区域、适当扩大搜索半径；遮挡、画面外运动、重复文字和切镜仍可能失锁。
 - 非平移档位要求视频与字幕分辨率宽高比一致；在 Aegisub 中先正确重采样。
-- 首次窗口迟迟不打开：检查 Aegisub 进度提示和 GitHub 下载连接。可以使用完整包离线安装。
+- 运行包下载很慢或失败：取消后重新运行，在提示框中换一个下载源；也可以使用 Release 完整包离线安装。
 - 窗口异常退出：错误消息会给出会话临时目录的 `error.log`。取消时进程树和 FFmpeg 会退出。
 
 ## 源码运行与维护
@@ -107,6 +121,8 @@ Aegisub 保留手动导出任务／导入结果入口。任务的 `mode` 为 `tr
 多边形任务增加 `roi_polygon: [[x,y], ...]`，顶点为原视频坐标，不重复首点；`roi: [x,y,width,height]` 自动保存外接矩形。两者统一通过 `regions.parse_region` 验证并生成掩膜。独立窗口可加载已知的 0.4.0／0.4.1 矩形任务，在内存中升级版本标识，不改原文件；保存配置时写出当前版本。自动联动和命令行批处理仍严格校验版本，宏、模块、运行包必须一致。
 
 测试：在本目录运行 `python -m unittest discover -s tests -v`；Lua 联动测试另需 `lupa==2.8`。合成渲染测试需要带 libass 的 FFmpeg。Windows 测试包含真实 Tk、进程启动与回填接口模拟，[验证记录](VALIDATION.md) 单独说明真实 Aegisub 界面验证范围。
+
+`bootstrap.ps1` 的退出码：1 表示追踪窗口异常，3 表示运行包下载或校验失败，4 表示下载时被取消。`-Mirror` 接收代理前缀；`-ReleaseBaseUrl` 只在测试中用来把 GitHub 地址换成本机服务。
 
 版本以 `ass_tracker/VERSION` 为准，宏的 `script_version` 必须同步，CI 会校验。运行代码、模块、安装器、依赖或打包逻辑改变必须提升版本；文档和测试独立调整可不触发发布。仓库根目录运行 `python tools/build_tracker.py` 构建，首次需要安装 `requirements-build.txt`。
 

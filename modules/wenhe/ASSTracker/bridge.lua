@@ -1,5 +1,6 @@
 -- Windows/LuaJIT bridge. No cmd.exe, PowerShell, or shell interpolation.
 local ffi = require('ffi')
+local bit = require('bit')
 if ffi.os ~= 'Windows' then error('一键追踪目前需要 Windows；其他平台仍可手动导入导出。') end
 ffi.cdef[[
 typedef struct { unsigned long cb; wchar_t *reserved,*desktop,*title;
@@ -22,6 +23,8 @@ int __stdcall CloseHandle(void*);
 unsigned long __stdcall ResumeThread(void*);
 unsigned long __stdcall GetLastError(void);
 unsigned long __stdcall GetTempPathW(unsigned long,wchar_t*);
+unsigned long __stdcall GetEnvironmentVariableW(const wchar_t*,wchar_t*,unsigned long);
+unsigned long __stdcall GetFileAttributesW(const wchar_t*);
 unsigned long __stdcall GetCurrentProcessId(void);
 unsigned long __stdcall GetTickCount(void);
 int __stdcall CreateDirectoryW(const wchar_t*,void*);
@@ -63,9 +66,34 @@ function M.session()
     end
     error('无法创建追踪会话目录。')
 end
+function M.local_app_data()
+    -- os.getenv returns the ANSI code page; user names may not fit in it.
+    local buffer=ffi.new('wchar_t[32768]')
+    local count=K.GetEnvironmentVariableW(wide('LOCALAPPDATA'),buffer,32768)
+    if count==0 or count>=32768 then error('无法读取 LOCALAPPDATA 目录。') end
+    return utf8(buffer,count)
+end
+local function attributes(path)
+    local value=K.GetFileAttributesW(wide(path))
+    if value~=0xFFFFFFFF then return value end -- INVALID_FILE_ATTRIBUTES
+end
+function M.is_file(path)
+    local value=attributes(path)
+    return value~=nil and bit.band(value,0x10)==0 -- FILE_ATTRIBUTE_DIRECTORY
+end
+function M.runtime_present(cache_root,version)
+    -- Existence only; bootstrap.ps1 still verifies every file hash before launch.
+    local directory=cache_root..'/'..version
+    return M.is_file(directory..'/runtime.json') and M.is_file(directory..'/ASSTracker.exe')
+end
+function M.make_directory(path)
+    if K.CreateDirectoryW(wide(path),nil)~=0 then return end
+    local value=attributes(path)
+    if value==nil or bit.band(value,0x10)==0 then error('无法创建目录：'..path) end
+end
 function M.cleanup(session)
     -- Delete only this session's known files; never recursively delete a path.
-    for _,name in ipairs({'job.json','result.json','result.json.tmp','cancel','error.log'}) do
+    for _,name in ipairs({'job.json','result.json','result.json.tmp','cancel','error.log','progress'}) do
         K.DeleteFileW(wide(session..'/'..name))
     end
     K.RemoveDirectoryW(wide(session))
@@ -102,9 +130,13 @@ function M.close(process)
     if process.job then K.CloseHandle(process.job);process.job=nil end
     if process.handle then K.CloseHandle(process.handle);process.handle=nil end
 end
-function M.start(root,session,version)
+function M.start(root,session,version,setup)
     local powershell=(os.getenv('SystemRoot') or 'C:/Windows')..'/System32/WindowsPowerShell/v1.0/powershell.exe'
-    return M.spawn(powershell,{'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',root..'/bootstrap.ps1',
-                   '-Version',version,'-SessionDir',session},root)
+    local args={'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',root..'/bootstrap.ps1',
+                '-Version',version,'-SessionDir',session}
+    if setup and setup.cache_root then args[#args+1]='-CacheRoot';args[#args+1]=setup.cache_root end
+    -- An empty argv value is never passed; bootstrap defaults to GitHub itself.
+    if setup and setup.mirror and setup.mirror~='' then args[#args+1]='-Mirror';args[#args+1]=setup.mirror end
+    return M.spawn(powershell,args,root)
 end
 return M

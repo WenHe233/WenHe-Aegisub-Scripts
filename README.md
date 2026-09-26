@@ -11,13 +11,13 @@
 | 文字渐入渐出 | `wenhe.TextFadeInOut` | 2.1.0 | 用分层 `clip` 生成带柔和边缘的文字渐入、渐出效果 |
 | 套用平移 (`\move`) | `wenhe.ApplyMove` | 1.0.0 | 将参考行的 `\move` 方向、距离和时间套用到其它选中行 |
 | 复制选中行正文 | `wenhe.CopySelectedText` | 1.0.0 | 将选中行的纯文本正文或原始 Text 字段复制到剪贴板 |
-| ASS 追踪 | `wenhe.ASSTracker` | 0.5.0 | 自适应窗口、可编辑多边形和五项联动追踪，支持裁切、绘图和外观缩放，完成后自动回填 |
+| ASS 追踪 | `wenhe.ASSTracker` | 0.6.0 | 自适应窗口、可编辑多边形和五项联动追踪，支持裁切、绘图和外观缩放，完成后自动回填 |
 
 ### ASS 追踪
 
 选中已在参考帧排版的字幕，运行「ASS 追踪 → 开始追踪（自动回填）」，框选目标并追踪，再点「应用并返回 Aegisub」。提供平移、缩放、旋转、斜切、透视五项逐级联动，默认开启前三项。
 
-通过 DependencyControl 安装宏与配套组件后，首次运行自动准备 Windows x64 运行包；无需预装 Python 或 FFmpeg。也可使用 Release 完整包离线安装。详见 [安装、使用和维护文档](apps/ass-tracker/README.md)。
+通过 DependencyControl 安装宏与配套组件后，首次运行会弹出提示框，选择保存位置和下载源（GitHub 官方或国内代理）后下载 Windows x64 运行包；无需预装 Python 或 FFmpeg。也可使用 Release 完整包离线安装。详见 [安装、使用和维护文档](apps/ass-tracker/README.md)。
 
 ### 复制选中行正文
 

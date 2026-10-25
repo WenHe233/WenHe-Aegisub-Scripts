@@ -131,6 +131,31 @@
           "feat(tracker): support \\fay, \\r and fades in 0.6.1"
         ]
       }
+    },
+    "wenhe.ReplaceStyles": {
+      "url": "@{baseUrl}/blob/main/macros/@{namespace}.lua",
+      "author": "WenHe",
+      "name": "批量替换样式",
+      "description": "检测选中行的样式，逐一选择目标样式并批量替换",
+      "channels": {
+        "stable": {
+          "version": "1.0.0",
+          "released": "2026-10-25",
+          "default": true,
+          "files": [
+            {
+              "name": ".lua",
+              "url": "@{fileBaseUrl}@{fileName}",
+              "sha1": "2f96df65a90613ee0d7f975de26f4307f905ef09"
+            }
+          ]
+        }
+      },
+      "changelog": {
+        "1.0.0": [
+          "feat: 新增选中行样式批量替换脚本"
+        ]
+      }
     }
   },
   "modules": {

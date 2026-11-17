@@ -181,6 +181,35 @@
           "feat: 新增 pos 坐标整数与 5 的倍数取整脚本"
         ]
       }
+    },
+    "wenhe.EnglishFontName": {
+      "url": "@{baseUrl}/blob/main/macros/@{namespace}.lua",
+      "author": "WenHe",
+      "name": "字体名称转英文 (\\fn)",
+      "description": "将选中行 \\fn 标签中的本地化字体名称替换为已安装字体的英文名称，保留 @ 前缀",
+      "channels": {
+        "stable": {
+          "version": "1.0.0",
+          "released": "2026-11-17",
+          "default": true,
+          "files": [
+            {
+              "name": ".lua",
+              "url": "@{fileBaseUrl}@{fileName}",
+              "sha1": "ac381c0a6c40fdce54e69cffbb1057e60b36d91c"
+            }
+          ],
+          "platforms": [
+            "Windows-x64",
+            "Windows-x86"
+          ]
+        }
+      },
+      "changelog": {
+        "1.0.0": [
+          "feat: 新增 fn 字体本地化名称转英文脚本，保留竖排前缀并校验字体身份"
+        ]
+      }
     }
   },
   "modules": {

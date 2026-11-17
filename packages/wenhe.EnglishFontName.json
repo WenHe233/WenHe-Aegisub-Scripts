@@ -1,0 +1,8 @@
+{
+  "release": {
+    "platforms": [
+      "Windows-x64",
+      "Windows-x86"
+    ]
+  }
+}

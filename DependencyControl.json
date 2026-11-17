@@ -156,6 +156,31 @@
           "feat: 新增选中行样式批量替换脚本"
         ]
       }
+    },
+    "wenhe.RoundPos": {
+      "url": "@{baseUrl}/blob/main/macros/@{namespace}.lua",
+      "author": "WenHe",
+      "name": "坐标取整 (\\pos)",
+      "description": "将选中行的 \\pos 坐标四舍五入为整数或最接近的 5 的倍数",
+      "channels": {
+        "stable": {
+          "version": "1.0.0",
+          "released": "2026-11-17",
+          "default": true,
+          "files": [
+            {
+              "name": ".lua",
+              "url": "@{fileBaseUrl}@{fileName}",
+              "sha1": "e31cc58f0cfa534dfb229bfd17628c6c36caf68a"
+            }
+          ]
+        }
+      },
+      "changelog": {
+        "1.0.0": [
+          "feat: 新增 pos 坐标整数与 5 的倍数取整脚本"
+        ]
+      }
     }
   },
   "modules": {
